@@ -1,6 +1,6 @@
 services:
   d20:
-    image: d20
+    image: d20:latest
     build: .
     environment:
       - TG_TOKEN=${TG_TOKEN}
