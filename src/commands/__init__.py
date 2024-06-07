@@ -4,6 +4,8 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 async def roll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Roll cubes. Example: /roll 2d6, /roll 8к20
+    """
     input: str = update.message.text # type: ignore
     try: input = input.split(' ')[1]
     except:
@@ -17,6 +19,29 @@ async def roll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         text = 'Не верный разделитель. Поддерживается либо латинская d (3d12), либо русская к (8к10)'
     else:
         r = roll_regular(ni[0], ni[1])
+        text = f'Your roll: {sum(r)} ({" + ".join(map(str, r))})'
+    await context.bot.send_message(
+        chat_id = update.effective_chat.id, # type: ignore
+        text = text,
+        reply_to_message_id = update.effective_message.id) # type: ignore
+
+async def rolld20(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Roll cubes. Example: /rolld20 2d6, /rolld20 8к20
+    High and low roll has increased chance
+    """
+    input: str = update.message.text # type: ignore
+    try: input = input.split(' ')[1]
+    except:
+        await context.bot.send_message(
+            chat_id = update.effective_chat.id, # type: ignore
+            text = 'Нет аргумента. Примеры: /roll 2d6, /roll 8к20',
+            reply_to_message_id = update.effective_message.id) # type: ignore
+        return
+    ni = normalize_input(input)
+    if ni[0] == 0:
+        text = 'Не верный разделитель. Поддерживается либо латинская d (3d12), либо русская к (8к10)'
+    else:
+        r = roll_d20(ni[0], ni[1])
         text = f'Your roll: {sum(r)} ({" + ".join(map(str, r))})'
     await context.bot.send_message(
         chat_id = update.effective_chat.id, # type: ignore
