@@ -1,4 +1,4 @@
-FROM python:3.11
+FROM python:3.11-alpine
 ADD src /d20
 ADD requirements.txt .
 RUN pip install -r requirements.txt
