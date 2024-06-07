@@ -26,8 +26,7 @@ async def roll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         reply_to_message_id = update.effective_message.id) # type: ignore
 
 async def rolld20(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Roll cubes. Example: /rolld20 2d6, /rolld20 8к20
-    High and low roll has increased chance
+    """Roll cubes with increased chances for max and min roll. Example: /rolld20 2d6, /rolld20 8к20
     """
     input: str = update.message.text # type: ignore
     try: input = input.split(' ')[1]
