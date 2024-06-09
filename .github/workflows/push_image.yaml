@@ -19,7 +19,6 @@ jobs:
           # list of Docker images to use as base name for tags
           images: |
             iammushroom/d20_bot
-            ghcr.io/IamMushroom/d20_bot
           # generate Docker tags based on the following events/attributes
           tags: |
             type=ref,event=branch
