@@ -16,7 +16,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           push: false
-          tags: iammushroom/d20_bot:latest
+          tags: immushroom/d20_bot:latest
           context: .
       - name: Run
         run: docker compose up -d

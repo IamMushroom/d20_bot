@@ -1,6 +1,6 @@
 services:
   d20:
-    image: iammushroom/d20_bot:latest
+    image: immushroom/d20_bot:latest
     container_name: d20_bot
     build: .
     environment:
