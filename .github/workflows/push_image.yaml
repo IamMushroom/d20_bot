@@ -9,6 +9,9 @@ jobs:
   build-and-push:
     runs-on: [self-hosted, raspberry]
     environment: prd
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
