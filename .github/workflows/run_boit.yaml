@@ -1,0 +1,12 @@
+name: Run bot
+on: [push]
+
+jobs:
+  run:
+    runs-on: [self-hosted, raspberry]
+    env:
+      TG_TOKEN: ${{ secrets.TG_TOKEN }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      
