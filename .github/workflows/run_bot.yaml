@@ -1,0 +1,21 @@
+name: Run bot
+on: [push]
+
+jobs:
+  run:
+    runs-on: [self-hosted, raspberry]
+    env:
+      TG_TOKEN: ${{ secrets.TG_TOKEN }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Build image
+        uses: docker/build-push-action@v5
+        with:
+          push: false
+          tags: iammushroom/d20_bot:latest
+          context: .
+      - name: Run
+        uses: hoverkraft-tech/compose-action@v1.5.1
+        with:
+          compose-file: docker-compose.yaml
