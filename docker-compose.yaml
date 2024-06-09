@@ -5,3 +5,8 @@ services:
     build: .
     environment:
       - TG_TOKEN=${TG_TOKEN}
+    restart: always
+    resources:
+      limits:
+        cpu: '0.01'
+        memory: 50M
