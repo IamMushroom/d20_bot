@@ -6,7 +6,11 @@ services:
     environment:
       - TG_TOKEN=${TG_TOKEN}
     restart: always
-    resources:
-      limits:
-        cpu: '0.01'
-        memory: 50M
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 150M
+        reservations:
+          cpus: '0.005'
+          memory: 20M
