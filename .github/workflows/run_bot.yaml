@@ -16,6 +16,4 @@ jobs:
           tags: iammushroom/d20_bot:latest
           context: .
       - name: Run
-        uses: hoverkraft-tech/compose-action@v1.5.1
-        with:
-          compose-file: docker-compose.yaml
+        run: docker compose up -d
