@@ -10,15 +10,13 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      - name: Debug
-        run: echo $TG_TOKEN > /tmp/token.txt
-      # - name: Stop docker compose
-      #   run: docker compose down
-      # - name: Build image
-      #   uses: docker/build-push-action@v5
-      #   with:
-      #     push: false
-      #     tags: iammushroom/d20_bot:latest
-      #     context: .
-      # - name: Run
-      #   run: docker compose up -d
+      - name: Stop docker compose
+        run: docker compose down
+      - name: Build image
+        uses: docker/build-push-action@v5
+        with:
+          push: false
+          tags: iammushroom/d20_bot:latest
+          context: .
+      - name: Run
+        run: docker compose up -d
