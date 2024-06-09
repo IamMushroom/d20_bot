@@ -4,6 +4,7 @@ on: [push]
 jobs:
   run:
     runs-on: [self-hosted, raspberry]
+    environment: prd
     env:
       TG_TOKEN: ${{ secrets.TG_TOKEN }}
     steps:
