@@ -12,6 +12,7 @@ def main() -> None:
     app = ApplicationBuilder().token(token).build()
     app.add_handler(CommandHandler("roll", commands.roll, filters.TEXT))
     app.add_handler(CommandHandler("rolld20", commands.rolld20, filters.TEXT))
+    app.add_handler(CommandHandler("timer", commands.timer, filters.TEXT))
     logging.info('"message": "Application started"')
     app.run_polling()
 
