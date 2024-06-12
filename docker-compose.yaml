@@ -1,6 +1,6 @@
 services:
   d20:
-    image: immushroom/d20_bot:${DOCKER_TAG }
+    image: immushroom/d20_bot:${DOCKER_TAG}
     #container_name: d20_bot
     build: .
     environment:
