@@ -15,13 +15,21 @@ jobs:
         shell: bash
         run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
         id: extract_branch
+      - name: Set variables
+        run: |
+          if [[$BRANCH == 'prd']]; then TAG='latest'; elif [[$BRANCH == 'prd']]; TAG=$(git rev-parse --short "$GITHUB_SHA")
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
       - name: Stop docker compose
         run: docker compose -p "d20_bot_${{ steps.extract_branch.outputs.branch }}" down
       - name: Build image
         uses: docker/build-push-action@v5
         with:
           push: false
-          tags: immushroom/d20_bot:latest
+          tags: immushroom/d20_bot:${{ env.TAG }}
           context: .
       - name: Run
+        env:
+          DOCKER_TAG: ${{ env.TAG }}
         run: docker compose -p "d20_bot_${{ steps.extract_branch.outputs.branch }}" up -d
+      - name: Prune unused images
+        run: echo 'y' | docker image prune
