@@ -7,27 +7,24 @@ jobs:
     environment:
       name: ${{ github.ref_name }}
     outputs:
-      branch: ${{ steps.extract_branch.outputs.branch }}
+      branch: ${{ steps.set_variables.outputs.branch }}
       tag: ${{ steps.set_variables.outputs.tag }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      - name: Extract branch name
-        shell: bash
-        run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
-        id: extract_branch
       - name: Set variables
         shell: bash
         run: |
           if [[$BRANCH == 'prd']]; then TAG='latest'; else TAG=$(git rev-parse --short "$GITHUB_SHA"); fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "branch=$(git branch -r --contains ${{ github.ref }}) --format "%(refname:lstrip=3)"" >> $GITHUB_OUTPUT
         id: set_variables
       - name: Stop docker compose
-        run: docker compose -p "d20_bot_${{ steps.extract_branch.outputs.branch }}" down
+        run: docker compose -p "d20_bot_${{ steps.set_variables.outputs.branch }}" down
   build:
     runs-on: [self-hosted, raspberry]
     environment:
-      name: ${{ github.ref_name }}
+      name: ${{ needs.prepare.outputs.branch }}
     needs:
       - prepare
     steps:
@@ -40,7 +37,7 @@ jobs:
   run:
     runs-on: [self-hosted, raspberry]
     environment:
-      name: ${{ github.ref_name }}
+      name: ${{ needs.prepare.outputs.branch }}
     needs:
       - prepare
       - build
