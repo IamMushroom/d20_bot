@@ -4,12 +4,13 @@ on: [push]
 jobs:
   run:
     runs-on: [self-hosted, raspberry]
-    environment: prd
-    env:
-      TG_TOKEN: ${{ secrets.TG_TOKEN }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+      - name: Extract branch name
+        shell: bash
+        run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
+        id: extract_branch
       - name: Stop docker compose
         run: docker compose down
       - name: Build image
@@ -19,4 +20,7 @@ jobs:
           tags: immushroom/d20_bot:latest
           context: .
       - name: Run
-        run: docker compose up -d
+        environment: ${{ steps.extract_branch.outputs.branch }}
+        env:
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+        run: docker compose up -d -p "d20_bot_${{ steps.extract_branch.outputs.branch }}"
