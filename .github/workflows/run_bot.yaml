@@ -16,7 +16,7 @@ jobs:
         run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
         id: extract_branch
       - name: Stop docker compose
-        run: docker compose down
+        run: docker compose -p "d20_bot_${{ steps.extract_branch.outputs.branch }}" down
       - name: Build image
         uses: docker/build-push-action@v5
         with:
@@ -24,4 +24,4 @@ jobs:
           tags: immushroom/d20_bot:latest
           context: .
       - name: Run
-        run: docker compose up -d -p "d20_bot_${{ steps.extract_branch.outputs.branch }}"
+        run: docker compose -p "d20_bot_${{ steps.extract_branch.outputs.branch }}" up -d
