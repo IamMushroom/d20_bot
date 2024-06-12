@@ -17,7 +17,7 @@ jobs:
         id: extract_branch
       - name: Set variables
         run: |
-          if [[$BRANCH == 'prd']]; then TAG='latest'; elif [[$BRANCH == 'prd']]; TAG=$(git rev-parse --short "$GITHUB_SHA")
+          if [[$BRANCH == 'prd']]; then TAG='latest'; elif [[$BRANCH == 'prd']]; TAG=$(git rev-parse --short "$GITHUB_SHA"); fi
           echo "TAG=$TAG" >> "$GITHUB_ENV"
       - name: Stop docker compose
         run: docker compose -p "d20_bot_${{ steps.extract_branch.outputs.branch }}" down
