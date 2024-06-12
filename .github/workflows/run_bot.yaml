@@ -1,5 +1,9 @@
 name: Run bot
-on: [push]
+on:
+  push:
+    paths-ignore:
+      - '**/README.md'
+      - '.github/workflows/push_image.yaml'
 
 jobs:
   prepare:
