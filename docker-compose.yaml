@@ -1,7 +1,7 @@
 services:
   d20:
     image: immushroom/d20_bot:latest
-    container_name: d20_bot
+    #container_name: d20_bot
     build: .
     environment:
       - TG_TOKEN=${TG_TOKEN}
