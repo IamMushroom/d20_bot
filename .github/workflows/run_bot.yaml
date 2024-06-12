@@ -2,12 +2,13 @@ name: Run bot
 on: [push]
 
 jobs:
-  run:
+  prepare:
     runs-on: [self-hosted, raspberry]
     environment:
       name: ${{ github.ref_name }}
-    env:
-      TG_TOKEN: ${{ secrets.TG_TOKEN }}
+    outputs:
+      branch: ${{ steps.extract_branch.outputs.branch }}
+      tag: ${{ steps.set_variables.outputs.tag }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -18,18 +19,35 @@ jobs:
       - name: Set variables
         run: |
           if [[$BRANCH == 'prd']]; then TAG='latest'; else TAG=$(git rev-parse --short "$GITHUB_SHA"); fi
-          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+        id: set_variables
       - name: Stop docker compose
         run: docker compose -p "d20_bot_${{ steps.extract_branch.outputs.branch }}" down
+  build:
+    runs-on: [self-hosted, raspberry]
+    environment:
+      name: ${{ github.ref_name }}
+    needs:
+      - prepare
+    steps:
       - name: Build image
         uses: docker/build-push-action@v5
         with:
           push: false
-          tags: immushroom/d20_bot:${{ env.TAG }}
+          tags: immushroom/d20_bot:${{ needs.prepare.outputs.tag }}
           context: .
+  run:
+    runs-on: [self-hosted, raspberry]
+    environment:
+      name: ${{ github.ref_name }}
+    needs:
+      - prepare
+      - build
+    steps:
       - name: Run
         env:
-          DOCKER_TAG: ${{ env.TAG }}
-        run: docker compose -p "d20_bot_${{ steps.extract_branch.outputs.branch }}" up -d
+          DOCKER_TAG: ${{ needs.prepare.outputs.tag }}
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+        run: docker compose -p "d20_bot_${{ needs.prepare.outputs.branch }}" up -d
       - name: Prune unused images
         run: echo 'y' | docker image prune
