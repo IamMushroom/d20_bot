@@ -16,7 +16,9 @@ jobs:
         shell: bash
         run: |
           BRANCH=$(git branch -r --contains ${{ github.ref }} --format "%(refname:lstrip=3)")
+          echo "branch=$BRANCH"
           if [[ $BRANCH == 'dev' ]]; then TAG=$(git rev-parse --short "$GITHUB_SHA"); else TAG='latest'; fi
+          echo "tag=$TAG"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "branch=$BRANCH" >> $GITHUB_OUTPUT
         id: set_variables
