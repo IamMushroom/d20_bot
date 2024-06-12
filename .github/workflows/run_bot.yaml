@@ -17,6 +17,7 @@ jobs:
         run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
         id: extract_branch
       - name: Set variables
+        shell: bash
         run: |
           if [[$BRANCH == 'prd']]; then TAG='latest'; else TAG=$(git rev-parse --short "$GITHUB_SHA"); fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
