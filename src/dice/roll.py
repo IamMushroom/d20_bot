@@ -15,3 +15,16 @@ def roll_d20(count: int, dice: int) -> Tuple[int, ...]:
         if r == dice + 2: r = dice
         result += (r,)
     return result
+
+def dgh() -> str:
+    hope = randint(1, 12)
+    fear = randint(1, 12)
+    result = hope + fear
+    if hope > fear:
+        s = 'с надеждой'
+    elif hope < fear:
+        s = 'со страхом'
+    else:
+        s = 'КРИТ!'
+    result = f"Твой бросок {s} (надежда: {hope}, страх: {fear})"
+    return result

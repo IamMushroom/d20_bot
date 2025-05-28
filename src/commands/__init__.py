@@ -1,4 +1,4 @@
-from dice.roll import roll_regular, roll_d20
+from dice.roll import roll_regular, roll_d20, dgh
 from utils import normalize_input
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -90,4 +90,18 @@ async def timer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await context.bot.send_message(
         chat_id = update.effective_chat.id, # type: ignore
         text = 'Время истекло',
+        reply_to_message_id = update.effective_message.id) # type: ignore
+
+async def duality(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Roll duality cubes. Example: /duality
+    """
+    frame = inspect.currentframe()
+    f_name = frame.f_code.co_name # type: ignore
+    input: str = update.message.text # type: ignore
+    ni = normalize_input(input)
+    text = dgh()
+    logging.info(f'"chat_id": "{update.effective_chat.id}", "function": "{f_name}", "argument": "{input}"') # type: ignore
+    await context.bot.send_message(
+        chat_id = update.effective_chat.id, # type: ignore
+        text = text,
         reply_to_message_id = update.effective_message.id) # type: ignore
