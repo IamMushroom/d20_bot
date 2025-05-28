@@ -98,7 +98,6 @@ async def duality(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     frame = inspect.currentframe()
     f_name = frame.f_code.co_name # type: ignore
     input: str = update.message.text # type: ignore
-    ni = normalize_input(input)
     text = dgh()
     logging.info(f'"chat_id": "{update.effective_chat.id}", "function": "{f_name}", "argument": "{input}"') # type: ignore
     await context.bot.send_message(
