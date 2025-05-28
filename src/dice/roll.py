@@ -26,5 +26,5 @@ def dgh() -> str:
         s = 'со страхом'
     else:
         s = 'КРИТ!'
-    result = f"Твой бросок {s} (надежда: {hope}, страх: {fear})"
+    result = f"Твой бросок {result} {s} (надежда: {hope}, страх: {fear})"
     return result
