@@ -22,6 +22,20 @@ def _seconds_word(seconds: int) -> str:
     return 'секунд'
 
 
+async def _finish_timer(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    message_id: int,
+    seconds: int,
+) -> None:
+    await sleep(seconds)
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text='⏰ Время истекло!',
+        reply_to_message_id=message_id,
+    )
+
+
 async def _handle_roll(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -114,11 +128,10 @@ async def timer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         text=f'⏳ Таймер поставлен на {seconds} {_seconds_word(seconds)}',
         reply_to_message_id=message.id,
     )
-    await sleep(seconds)
-    await context.bot.send_message(
-        chat_id=chat.id,
-        text='⏰ Время истекло!',
-        reply_to_message_id=message.id,
+    context.application.create_task(
+        _finish_timer(context, chat.id, message.id, seconds),
+        update=update,
+        name=f'timer-{chat.id}-{message.id}',
     )
 
 async def duality(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

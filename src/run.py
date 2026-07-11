@@ -12,7 +12,7 @@ def main() -> None:
         logging.critical('TG_TOKEN environment variable is not set')
         raise RuntimeError('TG_TOKEN environment variable is not set')
     logging.info('Token has been successfully loaded')
-    app = ApplicationBuilder().token(token).build()
+    app = ApplicationBuilder().token(token).concurrent_updates(16).build()
     app.add_handler(CommandHandler("roll", commands.roll, filters.TEXT))
     app.add_handler(CommandHandler("roll20", commands.roll20, filters.TEXT))
     app.add_handler(CommandHandler("rolld20", commands.rolld20, filters.TEXT))
