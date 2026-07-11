@@ -38,3 +38,6 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
           format: table
+          hide-progress: true
+          cache: "false"
+          cache-dir: ${{ github.workspace }}/../.trivy-cache

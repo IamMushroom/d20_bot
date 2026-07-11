@@ -110,6 +110,7 @@ uv run pytest
 ## CI/CD
 
 GitHub Actions запускает на self-hosted Raspberry Pi Ruff, тесты в `python:3.14-alpine`, smoke-build runtime-образа и Trivy-сканирование. Исправимые уязвимости уровня `HIGH` и `CRITICAL` останавливают CI. После deploy workflow проверяет, что контейнер не завершился при инициализации. Публикуемые образы содержат SBOM и provenance attestations. Workflow запуска бота и workflow публикации образа выполняются только после успешных проверок. Из соображений безопасности fork pull request не запускает код на self-hosted runner.
+База Trivy хранится в постоянном кеше рядом с workspace и повторно используется между job на Raspberry Pi.
 
 Dependabot раз в неделю проверяет Python-пакеты, GitHub Actions и Docker base image. Все экосистемы объединяются в один multi-ecosystem pull request. Deploy запускается только для push в ветки `dev` и `prd`.
 

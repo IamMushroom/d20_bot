@@ -12,7 +12,7 @@
 
 - Telegram-команды бросков, Daggerheart и таймеров.
 - JSON-логи, Docker deployment и GitHub Actions.
-- Docker healthcheck через Telegram `getMe`.
+- Локальный Docker healthcheck с heartbeat, обнаруживающий зависание event loop бота.
 - Расширенные броски `kh` и `kl`.
 - Structured observability с request/update/user IDs и latency.
 - Управление зависимостями через uv lockfile.

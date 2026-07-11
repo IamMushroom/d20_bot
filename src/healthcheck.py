@@ -1,24 +1,35 @@
-import json
+import asyncio
 from os import getenv
-from urllib.request import urlopen
+from pathlib import Path
+from time import time
 
-HEALTHCHECK_ERRORS = (OSError, ValueError)
+DEFAULT_READY_FILE = '/tmp/d20-bot-ready'
+DEFAULT_MAX_AGE = 30
+HEARTBEAT_INTERVAL = 10
 
 
-def telegram_is_available(token: str, timeout: float = 5) -> bool:
-    if not token:
-        return False
+def mark_ready(path: str = DEFAULT_READY_FILE) -> None:
+    Path(path).touch()
 
+
+def is_ready(path: str = DEFAULT_READY_FILE, max_age: float = DEFAULT_MAX_AGE) -> bool:
     try:
-        with urlopen(f'https://api.telegram.org/bot{token}/getMe', timeout=timeout) as response:
-            payload = json.load(response)
-    except HEALTHCHECK_ERRORS:
+        age = time() - Path(path).stat().st_mtime
+    except OSError:
         return False
-    return response.status == 200 and payload.get('ok') is True
+    return age <= max_age
+
+
+async def heartbeat(path: str = DEFAULT_READY_FILE, interval: float = HEARTBEAT_INTERVAL) -> None:
+    while True:
+        mark_ready(path)
+        await asyncio.sleep(interval)
 
 
 def main() -> int:
-    return 0 if telegram_is_available(getenv('TG_TOKEN', '')) else 1
+    path = getenv('HEALTHCHECK_FILE', DEFAULT_READY_FILE)
+    max_age = float(getenv('HEALTHCHECK_MAX_AGE', str(DEFAULT_MAX_AGE)))
+    return 0 if is_ready(path, max_age) else 1
 
 
 if __name__ == '__main__':  # pragma: no cover
