@@ -15,7 +15,7 @@ jobs:
     runs-on: [self-hosted, raspberry]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Run Ruff and pytest in Python 3.14
         run: docker build --target test --tag d20-bot:test .
