@@ -72,7 +72,7 @@ def test_timer_rejects_invalid_argument():
 
 def test_finish_timer_sends_notification_and_logs_completion(monkeypatch, caplog):
     context = make_context()
-    monkeypatch.setattr(commands, 'sleep', AsyncMock())
+    monkeypatch.setattr(commands.timer_commands, 'sleep', AsyncMock())
 
     with caplog.at_level(logging.INFO):
         asyncio.run(commands._finish_timer(context, 123, 456, 10, '123:456'))
@@ -89,7 +89,7 @@ def test_duality_passes_modifier_to_roll(monkeypatch):
     update = make_update(text='/duality 5')
     context = make_context(('5',))
     dgh = Mock(return_value='duality result')
-    monkeypatch.setattr(commands, 'dgh', dgh)
+    monkeypatch.setattr(commands.duality_commands, 'dgh', dgh)
 
     asyncio.run(commands.duality(update, context))
 
@@ -111,7 +111,7 @@ def test_error_handler_supports_edited_update(monkeypatch, caplog):
         effective_chat = SimpleNamespace(id=123)
         effective_message = SimpleNamespace(id=456)
 
-    monkeypatch.setattr(commands, 'Update', FakeUpdate)
+    monkeypatch.setattr(commands.error_commands, 'Update', FakeUpdate)
     context = make_context()
     context.error = RuntimeError('handler failed')
 

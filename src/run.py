@@ -8,13 +8,9 @@ import log_format
 
 
 async def set_bot_commands(application) -> None:
-    await application.bot.set_my_commands([
-        BotCommand('roll', 'бросить кубы'),
-        BotCommand('roll20', 'бросок с усиленными крайними значениями'),
-        BotCommand('duality', 'бросок Daggerheart'),
-        BotCommand('timer', 'поставить таймер'),
-        BotCommand('help', 'показать справку'),
-    ])
+    await application.bot.set_my_commands(
+        [BotCommand(command.name, command.menu_description) for command in commands.COMMANDS]
+    )
 
 def main() -> None:
     logging.info('Loading token from TG_TOKEN environment variable')
@@ -30,15 +26,9 @@ def main() -> None:
         .post_init(set_bot_commands)
         .build()
     )
-    app.add_handler(CommandHandler("start", commands.help_command))
-    app.add_handler(CommandHandler("help", commands.help_command))
-    app.add_handler(CommandHandler("roll", commands.roll, filters.TEXT))
-    app.add_handler(CommandHandler("roll20", commands.roll20, filters.TEXT))
-    app.add_handler(CommandHandler("rolld20", commands.rolld20, filters.TEXT))
-    app.add_handler(CommandHandler("timer", commands.timer, filters.TEXT))
-    app.add_handler(CommandHandler("duality", commands.duality, filters.TEXT))
-    app.add_handler(CommandHandler("dgh", commands.duality, filters.TEXT))
-    app.add_handler(CommandHandler("daggerheart", commands.duality, filters.TEXT))
+    for command in commands.COMMANDS:
+        for name in (command.name, *command.aliases):
+            app.add_handler(CommandHandler(name, command.callback, filters.TEXT))
     app.add_error_handler(commands.handle_error)
     logging.info('Application started')
     app.run_polling()
