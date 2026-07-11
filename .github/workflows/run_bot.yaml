@@ -2,12 +2,19 @@ name: Run bot
 
 on:
   push:
+    branches:
+      - dev
+      - prd
     paths-ignore:
       - '**/README.md'
       - '.github/workflows/push_image.yaml'
 
 permissions:
   contents: read
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   tests:
@@ -54,16 +61,24 @@ jobs:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
         shell: bash
         run: |
-          sleep 5
           CONTAINER_ID=$(docker compose -p "$COMPOSE_PROJECT" ps -q d20)
           if [[ -z "$CONTAINER_ID" ]]; then
             docker compose -p "$COMPOSE_PROJECT" logs --no-color d20
             exit 1
           fi
-          if [[ "$(docker inspect --format '{{.State.Running}}' "$CONTAINER_ID")" != "true" ]]; then
-            docker compose -p "$COMPOSE_PROJECT" logs --no-color d20
-            exit 1
-          fi
+          for _ in $(seq 1 18); do
+            STATUS=$(docker inspect --format '{{.State.Health.Status}}' "$CONTAINER_ID")
+            if [[ "$STATUS" == "healthy" ]]; then
+              exit 0
+            fi
+            if [[ "$STATUS" == "unhealthy" ]]; then
+              break
+            fi
+            sleep 5
+          done
+          docker inspect --format '{{json .State.Health}}' "$CONTAINER_ID"
+          docker compose -p "$COMPOSE_PROJECT" logs --no-color d20
+          exit 1
 
       - name: Prune unused images
         run: docker image prune --force

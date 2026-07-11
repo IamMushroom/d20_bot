@@ -1,3 +1,23 @@
+[project]
+name = "d20-bot"
+version = "0.11.0"
+description = "Telegram dice bot for tabletop role-playing games"
+requires-python = ">=3.14"
+dependencies = [
+    "python-dotenv==1.0.1",
+    "python-telegram-bot==22.8",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+    "ruff==0.15.21",
+]
+
+[tool.uv]
+package = false
+
 [tool.ruff]
 target-version = "py314"
 line-length = 100

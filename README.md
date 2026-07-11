@@ -12,11 +12,14 @@
 - `/roll 2d6` — бросок указанных кубов.
 - `/roll 1d20 + 4` — бросок с числовым модификатором.
 - `/roll 1d12 + 1d6 - 2` — выражение из нескольких кубов и модификаторов.
+- `/roll 4d6kh3` — бросить 4d6 и оставить три лучших значения.
+- `/roll 2d20kl1` — бросок d20 с помехой; `2d20kh1` — с преимуществом.
 - `/roll20 d20` — бросок с повышенной вероятностью минимального и максимального значения.
 - `/duality` — бросок двух d12 надежды и страха для Daggerheart.
 - `/duality 5` — брсок Daggerheart с модификатором.
 - `/timer 60` — таймер на 60 секунд.
 - `/start` и `/help` — справка по командам.
+- `/version` — текущая версия бота.
 
 Алиасы: `/rolld20` для `/roll20`, `/dgh` и `/daggerheart` для `/duality`.
 
@@ -30,9 +33,12 @@ d20
 8к10
 1d12 + 1d6
 2d20 - 1d4 + 3
+4d6kh3
+2d20kl1
 ```
 
 В выражении разрешены только `+` и `-`. Умножение, деление и скобки не поддерживаются.
+Суффикс `khN` оставляет `N` наибольших значений, `klN` — `N` наименьших.
 
 Ограничения:
 
@@ -61,7 +67,7 @@ d20
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+uv sync --frozen --no-dev
 $env:TG_TOKEN = '<telegram-token>'
 python src\run.py
 ```
@@ -93,10 +99,10 @@ docker compose logs -f d20
 ## Тесты
 
 ```shell
-python -m pip install -r requirements-dev.txt
-python -m ruff check .
-python -m ruff format --check .
-python -m pytest
+uv sync --frozen
+uv run ruff check .
+uv run ruff format --check .
+uv run pytest
 ```
 
 Обычный запуск `pytest` сразу строит отчёт о branch coverage. Минимальный допустимый уровень — 90%.
@@ -105,7 +111,9 @@ python -m pytest
 
 GitHub Actions запускает на self-hosted Raspberry Pi Ruff, тесты в `python:3.14-alpine`, smoke-build runtime-образа и Trivy-сканирование. Исправимые уязвимости уровня `HIGH` и `CRITICAL` останавливают CI. После deploy workflow проверяет, что контейнер не завершился при инициализации. Публикуемые образы содержат SBOM и provenance attestations. Workflow запуска бота и workflow публикации образа выполняются только после успешных проверок. Из соображений безопасности fork pull request не запускает код на self-hosted runner.
 
-Dependabot раз в неделю проверяет Python-пакеты, GitHub Actions и Docker base image. Обновления каждой экосистемы группируются в один pull request.
+Dependabot раз в неделю проверяет Python-пакеты, GitHub Actions и Docker base image. Все экосистемы объединяются в один multi-ecosystem pull request. Deploy запускается только для push в ветки `dev` и `prd`.
+
+Тег `vX.Y.Z` должен совпадать с версией в `pyproject.toml`. Такой тег публикует ARM64-образы в Docker Hub и GHCR, подписывает их через Cosign и создаёт GitHub Release.
 
 Требования к runner:
 

@@ -39,6 +39,20 @@ def test_evaluate_invalid_expression():
 
 
 @pytest.mark.parametrize(
+    ('expression', 'expected'),
+    [
+        ('4d6kh3', '🎲 Итог: 15\n🧮 Расчёт:\n• 4d6kh3: 1, 6, 3, 6 → 6 + 6 + 3 = 15'),
+        ('4d6kl2', '🎲 Итог: 4\n🧮 Расчёт:\n• 4d6kl2: 1, 6, 3, 6 → 1 + 3 = 4'),
+    ],
+)
+def test_evaluate_keep_expression(expression, expected):
+    def fixed_roller(_count, _sides):
+        return (1, 6, 3, 6)
+
+    assert roll_module.evaluate_roll_expression(expression, fixed_roller) == expected
+
+
+@pytest.mark.parametrize(
     ('hope', 'fear', 'outcome'),
     [
         (10, 4, 'с надеждой'),

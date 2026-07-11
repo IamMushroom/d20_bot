@@ -4,7 +4,7 @@ import sys
 
 import pytest
 
-from log_format import JsonFormatter, configure_logging
+from log_format import JsonFormatter, configure_logging, log_context
 
 
 def test_json_formatter_produces_valid_structured_log():
@@ -70,3 +70,14 @@ def test_configure_logging_uses_json_formatter(monkeypatch):
     assert config['force'] is True
     assert len(config['handlers']) == 1
     assert isinstance(config['handlers'][0].formatter, JsonFormatter)
+
+
+def test_json_formatter_includes_context_fields():
+    record = logging.LogRecord('test', logging.INFO, __file__, 1, 'message', (), None)
+
+    with log_context(request_id='request', update_id=10, user_id=20):
+        payload = json.loads(JsonFormatter().format(record))
+
+    assert payload['request_id'] == 'request'
+    assert payload['update_id'] == 10
+    assert payload['user_id'] == 20

@@ -27,7 +27,11 @@ def main() -> None:
     )
     for command in commands.COMMANDS:
         for name in (command.name, *command.aliases):
-            app.add_handler(CommandHandler(name, command.callback, filters.TEXT))
+            app.add_handler(
+                CommandHandler(
+                    name, commands.observed_callback(name, command.callback), filters.TEXT
+                )
+            )
     app.add_error_handler(commands.handle_error)
     logging.info('Application started')
     app.run_polling()

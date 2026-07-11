@@ -33,11 +33,22 @@ def evaluate_roll_expression(expression: str, roller: Roller) -> str | None:
         operator = '− ' if term.sign < 0 else ('+ ' if index > 0 else '')
         if isinstance(term, DiceTerm):
             rolls = roller(term.count, term.sides)
-            subtotal = sum(rolls)
+            kept_rolls = rolls
+            suffix = ''
+            if term.keep and term.keep_count:
+                reverse = term.keep == 'kh'
+                kept_rolls = tuple(sorted(rolls, reverse=reverse)[: term.keep_count])
+                suffix = f'{term.keep}{term.keep_count}'
+            subtotal = sum(kept_rolls)
             total += term.sign * subtotal
-            details.append(
-                f'• {operator}{term.count}d{term.sides}: {" + ".join(map(str, rolls))} = {subtotal}'
-            )
+            label = f'{term.count}d{term.sides}{suffix}'
+            if term.keep:
+                details.append(
+                    f'• {operator}{label}: {", ".join(map(str, rolls))} → '
+                    f'{" + ".join(map(str, kept_rolls))} = {subtotal}'
+                )
+            else:
+                details.append(f'• {operator}{label}: {" + ".join(map(str, rolls))} = {subtotal}')
         else:
             total += term.sign * term.value
             details.append(f'• {operator}{term.value}')

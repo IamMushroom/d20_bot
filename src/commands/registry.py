@@ -6,6 +6,7 @@ from commands.duality_commands import duality
 from commands.help_commands import help_command
 from commands.roll_commands import roll, roll20
 from commands.timer_commands import timer
+from commands.version_commands import version_command
 
 CommandCallback = Callable[..., Coroutine[Any, Any, None]]
 
@@ -29,6 +30,8 @@ COMMANDS = (
             '/roll 2d6 — обычный бросок',
             '/roll 1d20 + 4 — бросок с модификатором',
             '/roll 2d6 - 1d4 — сложное выражение',
+            '/roll 4d6kh3 — оставить три лучших куба',
+            '/roll 2d20kl1 — бросок с помехой',
         ),
     ),
     CommandSpec(
@@ -57,6 +60,12 @@ COMMANDS = (
         menu_description='показать справку',
         help_lines=('/help — эта справка',),
         aliases=('start',),
+    ),
+    CommandSpec(
+        name='version',
+        callback=version_command,
+        menu_description='показать версию бота',
+        help_lines=('/version — версия бота',),
     ),
 )
 

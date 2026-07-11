@@ -6,7 +6,7 @@ MAX_DICE_SIDES = 1000
 MAX_MODIFIER = 1_000_000
 MAX_EXPRESSION_TERMS = 20
 
-_DICE_EXPRESSION = re.compile(r'^(\d*)[dDкК](\d+)$')
+_DICE_EXPRESSION = re.compile(r'^(\d*)[dDкК](\d+)(?:(kh|kl)(\d+))?$', re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -14,6 +14,8 @@ class DiceTerm:
     count: int
     sides: int
     sign: int = 1
+    keep: str | None = None
+    keep_count: int | None = None
 
 
 @dataclass(frozen=True)
@@ -26,19 +28,31 @@ ExpressionTerm = DiceTerm | ModifierTerm
 RollExpression = tuple[ExpressionTerm, ...]
 
 
-def normalize_input(string: str) -> tuple[int, int]:
+def parse_dice_term(string: str, sign: int = 1) -> DiceTerm | None:
     match = _DICE_EXPRESSION.fullmatch(string.strip())
     if match is None:
-        return (0, 0)
+        return None
 
     count = int(match.group(1) or 1)
     sides = int(match.group(2))
+    keep = match.group(3).lower() if match.group(3) else None
+    keep_count = int(match.group(4)) if match.group(4) else None
     if not 1 <= count <= MAX_DICE_COUNT:
-        return (0, 0)
+        return None
     if not 1 <= sides <= MAX_DICE_SIDES:
+        return None
+    if keep_count is not None and not 1 <= keep_count <= count:
+        return None
+
+    return DiceTerm(count=count, sides=sides, sign=sign, keep=keep, keep_count=keep_count)
+
+
+def normalize_input(string: str) -> tuple[int, int]:
+    term = parse_dice_term(string)
+    if term is None or term.keep is not None:
         return (0, 0)
 
-    return (count, sides)
+    return (term.count, term.sides)
 
 
 def parse_roll_expression(string: str) -> RollExpression | None:
@@ -57,12 +71,12 @@ def parse_roll_expression(string: str) -> RollExpression | None:
         sign_text, raw_term = match.groups()
         sign = -1 if sign_text == '-' else 1
 
-        dice = normalize_input(raw_term)
-        if dice != (0, 0):
-            total_dice += dice[0]
+        dice = parse_dice_term(raw_term, sign)
+        if dice is not None:
+            total_dice += dice.count
             if total_dice > MAX_DICE_COUNT:
                 return None
-            terms.append(DiceTerm(count=dice[0], sides=dice[1], sign=sign))
+            terms.append(dice)
             continue
 
         if not raw_term.isdecimal():

@@ -5,23 +5,25 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+RUN pip install --no-cache-dir uv==0.11.28
+
 FROM base AS test
 
-COPY requirements.txt requirements-dev.txt ./
-RUN pip install --no-cache-dir -r requirements-dev.txt
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen
 
-COPY pyproject.toml pytest.ini ./
+COPY pytest.ini ./
 COPY src ./src
 COPY tests ./tests
 
-RUN python -m ruff check . \
-    && python -m ruff format --check . \
-    && python -m pytest
+RUN uv run --no-sync ruff check . \
+    && uv run --no-sync ruff format --check . \
+    && uv run --no-sync pytest
 
 FROM base AS runtime
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt \
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev \
     && addgroup -S bot \
     && adduser -S bot -G bot
 
@@ -29,4 +31,7 @@ COPY --chown=bot:bot src ./src
 
 USER bot
 
-CMD ["python", "src/run.py"]
+HEALTHCHECK --interval=60s --timeout=10s --start-period=20s --retries=3 \
+    CMD ["python", "src/healthcheck.py"]
+
+CMD [".venv/bin/python", "src/run.py"]
