@@ -61,3 +61,21 @@ def test_duality_outcome(monkeypatch, hope, fear, outcome):
     assert f'Твой бросок {hope + fear} {outcome}' in result
     assert f'Надежда: {hope}' in result
     assert f'Страх: {fear}' in result
+    assert 'Модификатор' not in result
+
+
+@pytest.mark.parametrize(
+    ('modifier', 'total', 'display'),
+    [
+        (5, 17, '5'),
+        (-3, 9, '−3'),
+    ],
+)
+def test_duality_modifier(monkeypatch, modifier, total, display):
+    values = iter((8, 4))
+    monkeypatch.setattr(roll_module, 'randint', lambda _minimum, _maximum: next(values))
+
+    result = roll_module.dgh(modifier)
+
+    assert f'Твой бросок {total} с надеждой' in result
+    assert f'Модификатор: {display}' in result

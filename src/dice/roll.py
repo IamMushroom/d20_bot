@@ -43,19 +43,24 @@ def evaluate_roll_expression(expression: str, roller: Roller) -> Optional[str]:
 
     return f'🎲 Итог: {total}\n🧮 Расчёт:\n' + '\n'.join(details)
 
-def dgh() -> str:
+def dgh(modifier: int = 0) -> str:
     hope = randint(1, 12)
     fear = randint(1, 12)
-    result = hope + fear
+    result = hope + fear + modifier
     if hope > fear:
         s = 'с надеждой'
     elif hope < fear:
         s = 'со страхом'
     else:
         s = 'КРИТ!'
+    modifier_line = ''
+    if modifier:
+        operator = '' if modifier > 0 else '−'
+        modifier_line = f'\n🧮 Модификатор: {operator}{abs(modifier)}'
     result = (
         f'🎲 Твой бросок {result} {s}\n'
         f'✨ Надежда: {hope}\n'
         f'🌑 Страх: {fear}'
+        f'{modifier_line}'
     )
     return result
