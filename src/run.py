@@ -13,6 +13,7 @@ async def set_bot_commands(application) -> None:
     await application.bot.set_my_commands(
         [BotCommand(command.name, command.menu_description) for command in commands.COMMANDS]
     )
+    logging.info('Application started')
 
 
 def main() -> None:
@@ -33,7 +34,7 @@ def main() -> None:
                 )
             )
     app.add_error_handler(commands.handle_error)
-    logging.info('Application started')
+    logging.info('Starting application')
     app.run_polling()
 
 
