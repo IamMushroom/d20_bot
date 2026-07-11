@@ -31,7 +31,13 @@ def test_evaluate_expression_with_dice_and_modifiers():
 
     result = roll_module.evaluate_roll_expression('2d6 - 1d4 + 3', fixed_roller)
 
-    assert result == 'Your roll: 5 (2d6: 1 + 2; - 1d4: 1; + 3)'
+    assert result == (
+        '🎲 Итог: 5\n'
+        '🧮 Расчёт:\n'
+        '• 2d6: 1 + 2 = 3\n'
+        '• − 1d4: 1 = 1\n'
+        '• + 3'
+    )
 
 
 def test_evaluate_invalid_expression():
@@ -53,5 +59,5 @@ def test_duality_outcome(monkeypatch, hope, fear, outcome):
     result = roll_module.dgh()
 
     assert f'Твой бросок {hope + fear} {outcome}' in result
-    assert f'надежда: {hope}' in result
-    assert f'страх: {fear}' in result
+    assert f'Надежда: {hope}' in result
+    assert f'Страх: {fear}' in result

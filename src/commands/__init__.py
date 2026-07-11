@@ -6,7 +6,7 @@ import logging
 import inspect
 
 INVALID_ROLL_MESSAGE = (
-    'Неверный формат броска. Примеры: d20, 1d12 + 1d6, '
+    '⚠️ Неверный формат броска.\nПримеры: d20, 1d12 + 1d6, '
     '1d10 + 4, 2d20 - 1d4. Максимум: 100 кубов и 1000 граней'
 )
 MIN_TIMER_SECONDS = 1
@@ -38,7 +38,7 @@ async def _handle_roll(
     if not expression:
         await context.bot.send_message(
             chat_id=chat.id,
-            text=f'Нет аргумента. Примеры: /{command_name} 2d6, /{command_name} 1d20 + 4',
+            text=f'⚠️ Нет аргумента.\nПримеры: /{command_name} 2d6, /{command_name} 1d20 + 4',
             reply_to_message_id=message.id,
         )
         logging.warning(
@@ -97,7 +97,7 @@ async def timer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if len(context.args) > 1 or not MIN_TIMER_SECONDS <= seconds <= MAX_TIMER_SECONDS:
         await context.bot.send_message(
             chat_id=chat.id,
-            text='Укажи целое число от 1 до 86400. Примеры: /timer 60, /timer 180',
+            text='⚠️ Укажи целое число от 1 до 86400.\nПримеры: /timer 60, /timer 180',
             reply_to_message_id=message.id,
         )
         logging.warning(
@@ -112,13 +112,13 @@ async def timer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
     await context.bot.send_message(
         chat_id=chat.id,
-        text=f'Поставлен таймер на {seconds} {_seconds_word(seconds)}',
+        text=f'⏳ Таймер поставлен на {seconds} {_seconds_word(seconds)}',
         reply_to_message_id=message.id,
     )
     await sleep(seconds)
     await context.bot.send_message(
         chat_id=chat.id,
-        text='Время истекло',
+        text='⏰ Время истекло!',
         reply_to_message_id=message.id,
     )
 

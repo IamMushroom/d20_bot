@@ -28,17 +28,20 @@ def evaluate_roll_expression(expression: str, roller: Roller) -> Optional[str]:
     total = 0
     details = []
     for index, (sign, term) in enumerate(terms):
-        operator = '- ' if sign < 0 else ('+ ' if index > 0 else '')
+        operator = '− ' if sign < 0 else ('+ ' if index > 0 else '')
         if isinstance(term, tuple):
             count, sides = term
             rolls = roller(count, sides)
-            total += sign * sum(rolls)
-            details.append(f'{operator}{count}d{sides}: {" + ".join(map(str, rolls))}')
+            subtotal = sum(rolls)
+            total += sign * subtotal
+            details.append(
+                f'• {operator}{count}d{sides}: {" + ".join(map(str, rolls))} = {subtotal}'
+            )
         else:
             total += sign * term
-            details.append(f'{operator}{term}')
+            details.append(f'• {operator}{term}')
 
-    return f'Your roll: {total} ({"; ".join(details)})'
+    return f'🎲 Итог: {total}\n🧮 Расчёт:\n' + '\n'.join(details)
 
 def dgh() -> str:
     hope = randint(1, 12)
@@ -50,5 +53,9 @@ def dgh() -> str:
         s = 'со страхом'
     else:
         s = 'КРИТ!'
-    result = f"Твой бросок {result} {s} (надежда: {hope}, страх: {fear})"
+    result = (
+        f'🎲 Твой бросок {result} {s}\n'
+        f'✨ Надежда: {hope}\n'
+        f'🌑 Страх: {fear}'
+    )
     return result
