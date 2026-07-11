@@ -1,5 +1,6 @@
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
-from typing import Callable, Coroutine, Any
+from typing import Any
 
 from commands.duality_commands import duality
 from commands.help_commands import help_command
@@ -33,18 +34,14 @@ COMMANDS = (
         name='roll20',
         callback=roll20,
         menu_description='бросок с усиленными крайними значениями',
-        help_lines=(
-            '/roll20 d20 — повышенный шанс минимума и максимума',
-        ),
+        help_lines=('/roll20 d20 — повышенный шанс минимума и максимума',),
         aliases=('rolld20',),
     ),
     CommandSpec(
         name='duality',
         callback=duality,
         menu_description='бросок Daggerheart',
-        help_lines=(
-            '/duality 5 — бросок Daggerheart с модификатором',
-        ),
+        help_lines=('/duality 5 — бросок Daggerheart с модификатором',),
         aliases=('dgh', 'daggerheart'),
     ),
     CommandSpec(

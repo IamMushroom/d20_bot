@@ -1,9 +1,10 @@
 import logging
 
-from dice.expression import MAX_MODIFIER
-from dice.roll import dgh
 from telegram import Update
 from telegram.ext import ContextTypes
+
+from dice.expression import MAX_MODIFIER
+from dice.roll import dgh
 
 
 async def duality(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -13,7 +14,9 @@ async def duality(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if chat is None or message is None:
         return
 
-    command_name = message.text.split()[0].removeprefix('/').split('@')[0] if message.text else 'duality'
+    command_name = (
+        message.text.split()[0].removeprefix('/').split('@')[0] if message.text else 'duality'
+    )
     modifier = 0
     if len(context.args) > 1:
         modifier_is_valid = False

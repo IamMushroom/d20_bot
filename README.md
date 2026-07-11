@@ -89,6 +89,8 @@ docker compose logs -f d20
 
 ```shell
 python -m pip install -r requirements-dev.txt
+python -m ruff check .
+python -m ruff format --check .
 python -m pytest
 ```
 

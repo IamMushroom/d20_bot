@@ -1,8 +1,9 @@
 import logging
 
-from dice.roll import Roller, evaluate_roll_expression, roll_d20, roll_regular
 from telegram import Update
 from telegram.ext import ContextTypes
+
+from dice.roll import Roller, evaluate_roll_expression, roll_d20, roll_regular
 
 INVALID_ROLL_MESSAGE = (
     '⚠️ Неверный формат броска.\nПримеры: d20, 1d12 + 1d6, '

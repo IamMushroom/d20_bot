@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 EXTRA_FIELDS = ('chat_id', 'command', 'argument', 'timer_id')
 
@@ -8,7 +8,7 @@ EXTRA_FIELDS = ('chat_id', 'command', 'argument', 'timer_id')
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         payload = {
-            'datetime': datetime.fromtimestamp(record.created, timezone.utc).isoformat(),
+            'datetime': datetime.fromtimestamp(record.created, UTC).isoformat(),
             'level': record.levelname,
             'logger': record.name,
             'message': record.getMessage(),

@@ -31,13 +31,7 @@ def test_evaluate_expression_with_dice_and_modifiers():
 
     result = roll_module.evaluate_roll_expression('2d6 - 1d4 + 3', fixed_roller)
 
-    assert result == (
-        '🎲 Итог: 5\n'
-        '🧮 Расчёт:\n'
-        '• 2d6: 1 + 2 = 3\n'
-        '• − 1d4: 1 = 1\n'
-        '• + 3'
-    )
+    assert result == ('🎲 Итог: 5\n🧮 Расчёт:\n• 2d6: 1 + 2 = 3\n• − 1d4: 1 = 1\n• + 3')
 
 
 def test_evaluate_invalid_expression():

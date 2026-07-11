@@ -1,14 +1,16 @@
+from collections.abc import Callable
 from random import randint
-from typing import Callable, Optional, Tuple
 
 from dice.expression import DiceTerm, parse_roll_expression
 
-Roller = Callable[[int, int], Tuple[int, ...]]
+Roller = Callable[[int, int], tuple[int, ...]]
 
-def roll_regular(count: int, dice: int) -> Tuple[int, ...]:
+
+def roll_regular(count: int, dice: int) -> tuple[int, ...]:
     return tuple(randint(1, dice) for _ in range(count))
 
-def roll_d20(count: int, dice: int) -> Tuple[int, ...]:
+
+def roll_d20(count: int, dice: int) -> tuple[int, ...]:
     result = []
     for _ in range(count):
         roll = randint(1, dice + 2)
@@ -20,7 +22,7 @@ def roll_d20(count: int, dice: int) -> Tuple[int, ...]:
     return tuple(result)
 
 
-def evaluate_roll_expression(expression: str, roller: Roller) -> Optional[str]:
+def evaluate_roll_expression(expression: str, roller: Roller) -> str | None:
     terms = parse_roll_expression(expression)
     if terms is None:
         return None
@@ -42,6 +44,7 @@ def evaluate_roll_expression(expression: str, roller: Roller) -> Optional[str]:
 
     return f'🎲 Итог: {total}\n🧮 Расчёт:\n' + '\n'.join(details)
 
+
 def dgh(modifier: int = 0) -> str:
     hope = randint(1, 12)
     fear = randint(1, 12)
@@ -56,10 +59,5 @@ def dgh(modifier: int = 0) -> str:
     if modifier:
         operator = '' if modifier > 0 else '−'
         modifier_line = f'\n🧮 Модификатор: {operator}{abs(modifier)}'
-    result = (
-        f'🎲 Твой бросок {result} {s}\n'
-        f'✨ Надежда: {hope}\n'
-        f'🌑 Страх: {fear}'
-        f'{modifier_line}'
-    )
+    result = f'🎲 Твой бросок {result} {s}\n✨ Надежда: {hope}\n🌑 Страх: {fear}{modifier_line}'
     return result

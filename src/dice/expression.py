@@ -1,6 +1,5 @@
 import re
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
 
 MAX_DICE_COUNT = 100
 MAX_DICE_SIDES = 1000
@@ -8,6 +7,7 @@ MAX_MODIFIER = 1_000_000
 MAX_EXPRESSION_TERMS = 20
 
 _DICE_EXPRESSION = re.compile(r'^(\d*)[dDкК](\d+)$')
+
 
 @dataclass(frozen=True)
 class DiceTerm:
@@ -22,11 +22,11 @@ class ModifierTerm:
     sign: int = 1
 
 
-ExpressionTerm = Union[DiceTerm, ModifierTerm]
-RollExpression = Tuple[ExpressionTerm, ...]
+ExpressionTerm = DiceTerm | ModifierTerm
+RollExpression = tuple[ExpressionTerm, ...]
 
 
-def normalize_input(string: str) -> Tuple[int, int]:
+def normalize_input(string: str) -> tuple[int, int]:
     match = _DICE_EXPRESSION.fullmatch(string.strip())
     if match is None:
         return (0, 0)
@@ -41,7 +41,7 @@ def normalize_input(string: str) -> Tuple[int, int]:
     return (count, sides)
 
 
-def parse_roll_expression(string: str) -> Optional[RollExpression]:
+def parse_roll_expression(string: str) -> RollExpression | None:
     expression = re.sub(r'\s+', '', string)
     if not expression:
         return None

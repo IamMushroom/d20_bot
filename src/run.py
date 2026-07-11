@@ -1,9 +1,11 @@
-from dotenv import load_dotenv
+import logging
 from os import getenv
+
+from dotenv import load_dotenv
 from telegram import BotCommand
 from telegram.ext import ApplicationBuilder, CommandHandler, filters
+
 import commands
-import logging
 import log_format
 
 
@@ -11,6 +13,7 @@ async def set_bot_commands(application) -> None:
     await application.bot.set_my_commands(
         [BotCommand(command.name, command.menu_description) for command in commands.COMMANDS]
     )
+
 
 def main() -> None:
     logging.info('Loading token from TG_TOKEN environment variable')
@@ -20,11 +23,7 @@ def main() -> None:
         raise RuntimeError('TG_TOKEN environment variable is not set')
     logging.info('Token has been successfully loaded')
     app = (
-        ApplicationBuilder()
-        .token(token)
-        .concurrent_updates(16)
-        .post_init(set_bot_commands)
-        .build()
+        ApplicationBuilder().token(token).concurrent_updates(16).post_init(set_bot_commands).build()
     )
     for command in commands.COMMANDS:
         for name in (command.name, *command.aliases):
@@ -33,10 +32,11 @@ def main() -> None:
     logging.info('Application started')
     app.run_polling()
 
+
 if __name__ == '__main__':
     load_dotenv()
     format_name = getenv('LOG_FORMAT', 'json')
     log_format.configure_logging(format_name)
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("telegram.ext.Application").setLevel(logging.WARNING)
+    logging.getLogger('httpx').setLevel(logging.WARNING)
+    logging.getLogger('telegram.ext.Application').setLevel(logging.WARNING)
     main()
