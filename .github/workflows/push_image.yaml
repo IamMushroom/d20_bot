@@ -51,6 +51,8 @@ jobs:
           context: .
           push: true
           platforms: linux/arm64
+          provenance: mode=max
+          sbom: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
     

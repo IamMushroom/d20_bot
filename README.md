@@ -103,7 +103,7 @@ python -m pytest
 
 ## CI/CD
 
-GitHub Actions запускает на self-hosted Raspberry Pi Ruff, тесты в `python:3.14-alpine`, smoke-build runtime-образа и Trivy-сканирование. Исправимые уязвимости уровня `HIGH` и `CRITICAL` останавливают CI. Workflow запуска бота и workflow публикации образа выполняются только после успешных проверок. Из соображений безопасности fork pull request не запускает код на self-hosted runner.
+GitHub Actions запускает на self-hosted Raspberry Pi Ruff, тесты в `python:3.14-alpine`, smoke-build runtime-образа и Trivy-сканирование. Исправимые уязвимости уровня `HIGH` и `CRITICAL` останавливают CI. После deploy workflow проверяет, что контейнер не завершился при инициализации. Публикуемые образы содержат SBOM и provenance attestations. Workflow запуска бота и workflow публикации образа выполняются только после успешных проверок. Из соображений безопасности fork pull request не запускает код на self-hosted runner.
 
 Dependabot раз в неделю проверяет Python-пакеты, GitHub Actions и Docker base image. Обновления каждой экосистемы группируются в один pull request.
 

@@ -47,5 +47,23 @@ jobs:
           -p "${{ steps.variables.outputs.project }}"
           up -d --remove-orphans
 
+      - name: Verify deployment
+        env:
+          COMPOSE_PROJECT: ${{ steps.variables.outputs.project }}
+          DOCKER_TAG: ${{ steps.variables.outputs.tag }}
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+        shell: bash
+        run: |
+          sleep 5
+          CONTAINER_ID=$(docker compose -p "$COMPOSE_PROJECT" ps -q d20)
+          if [[ -z "$CONTAINER_ID" ]]; then
+            docker compose -p "$COMPOSE_PROJECT" logs --no-color d20
+            exit 1
+          fi
+          if [[ "$(docker inspect --format '{{.State.Running}}' "$CONTAINER_ID")" != "true" ]]; then
+            docker compose -p "$COMPOSE_PROJECT" logs --no-color d20
+            exit 1
+          fi
+
       - name: Prune unused images
         run: docker image prune --force
