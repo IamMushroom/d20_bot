@@ -20,6 +20,7 @@ def main() -> None:
     app.add_handler(CommandHandler("duality", commands.duality, filters.TEXT))
     app.add_handler(CommandHandler("dgh", commands.duality, filters.TEXT))
     app.add_handler(CommandHandler("daggerheart", commands.duality, filters.TEXT))
+    app.add_error_handler(commands.handle_error)
     logging.info('Application started')
     app.run_polling()
 

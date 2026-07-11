@@ -3,7 +3,6 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from asyncio import sleep
 import logging
-import inspect
 
 INVALID_ROLL_MESSAGE = (
     '⚠️ Неверный формат броска.\nПримеры: d20, 1d12 + 1d6, '
@@ -123,17 +122,42 @@ async def timer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 async def duality(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Roll duality cubes. Example: /duality
-    """
-    frame = inspect.currentframe()
-    f_name = frame.f_code.co_name # type: ignore
-    input: str = update.message.text # type: ignore
+    """Roll duality cubes. Example: /duality."""
+    chat = update.effective_chat
+    message = update.effective_message
+    if chat is None or message is None:
+        return
+
+    command_name = message.text.split()[0].removeprefix('/').split('@')[0] if message.text else 'duality'
     text = dgh()
     logging.info(
         'Duality dice rolled',
-        extra={'chat_id': update.effective_chat.id, 'command': f_name, 'argument': input}, # type: ignore
+        extra={'chat_id': chat.id, 'command': command_name},
     )
     await context.bot.send_message(
-        chat_id = update.effective_chat.id, # type: ignore
-        text = text,
-        reply_to_message_id = update.effective_message.id) # type: ignore
+        chat_id=chat.id,
+        text=text,
+        reply_to_message_id=message.id,
+    )
+
+
+async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Log unexpected handler errors and notify the affected chat."""
+    error = context.error
+    logging.error(
+        'Unhandled exception while processing Telegram update',
+        exc_info=(type(error), error, error.__traceback__) if error else None,
+    )
+
+    if not isinstance(update, Update):
+        return
+    chat = update.effective_chat
+    message = update.effective_message
+    if chat is None:
+        return
+
+    await context.bot.send_message(
+        chat_id=chat.id,
+        text='⚠️ Не удалось обработать команду. Попробуй ещё раз.',
+        reply_to_message_id=message.id if message else None,
+    )
