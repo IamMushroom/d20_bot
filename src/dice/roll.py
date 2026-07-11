@@ -1,7 +1,7 @@
 from random import randint
 from typing import Callable, Optional, Tuple
 
-from utils import parse_roll_expression
+from dice.expression import parse_roll_expression
 
 Roller = Callable[[int, int], Tuple[int, ...]]
 

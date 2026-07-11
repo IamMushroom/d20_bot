@@ -9,6 +9,18 @@ INVALID_ROLL_MESSAGE = (
     'Неверный формат броска. Примеры: d20, 1d12 + 1d6, '
     '1d10 + 4, 2d20 - 1d4. Максимум: 100 кубов и 1000 граней'
 )
+MIN_TIMER_SECONDS = 1
+MAX_TIMER_SECONDS = 86_400
+
+
+def _seconds_word(seconds: int) -> str:
+    if seconds % 100 in range(11, 15):
+        return 'секунд'
+    if seconds % 10 == 1:
+        return 'секунду'
+    if seconds % 10 in range(2, 5):
+        return 'секунды'
+    return 'секунд'
 
 
 async def _handle_roll(
@@ -29,8 +41,9 @@ async def _handle_roll(
             text=f'Нет аргумента. Примеры: /{command_name} 2d6, /{command_name} 1d20 + 4',
             reply_to_message_id=message.id,
         )
-        logging.error(
-            f'"chat_id": "{chat.id}", "function": "{command_name}", "message": "lack of argument"'
+        logging.warning(
+            'Roll command has no argument',
+            extra={'chat_id': chat.id, 'command': command_name},
         )
         return
 
@@ -38,12 +51,13 @@ async def _handle_roll(
     if text is None:
         text = INVALID_ROLL_MESSAGE
         logging.warning(
-            f'"chat_id": "{chat.id}", "function": "{command_name}", '
-            f'"message": "invalid expression", "argument": "{expression}"'
+            'Invalid roll expression',
+            extra={'chat_id': chat.id, 'command': command_name, 'argument': expression},
         )
     else:
         logging.info(
-            f'"chat_id": "{chat.id}", "function": "{command_name}", "argument": "{expression}"'
+            'Dice rolled',
+            extra={'chat_id': chat.id, 'command': command_name, 'argument': expression},
         )
 
     await context.bot.send_message(
@@ -68,36 +82,45 @@ async def roll20(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await _handle_roll(update, context, roll_d20, 'roll20')
 
 async def timer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Set timer. Example: /timer 180, /timer
-    """
-    o = {1: 'у', 2: 'ы', 3: 'ы', 4: 'ы'}
-    frame = inspect.currentframe()
-    f_name = frame.f_code.co_name # type: ignore
-    input: str = update.message.text # type: ignore
-    try: sec = input.split(' ')[1]
-    except:
-        sec = 60
-    try: sec = int(sec)
-    except:
-        await context.bot.send_message(
-            chat_id = update.effective_chat.id, # type: ignore
-            text = 'Аргументом должно быть целое число. Примеры: /timer 60, /timer 180',
-            reply_to_message_id = update.effective_message.id) # type: ignore
-        logging.error(f'"chat_id": "{update.effective_chat.id}", "function": "{f_name}", "message": "argument mistype"') # type: ignore
+    """Set a timer between 1 second and 24 hours."""
+    chat = update.effective_chat
+    message = update.effective_message
+    if chat is None or message is None:
         return
-    logging.info(f'"chat_id": "{update.effective_chat.id}", "function": "{f_name}", "argument": "{input}"') # type: ignore
-    text_o = sec % 10
-    try: text = f'Поставлен таймер на {sec} секунд{o[text_o]}'
-    except: text = f'Поставлен таймер на {sec} секунд'
+
+    argument = context.args[0] if len(context.args) == 1 else '60'
+    try:
+        seconds = int(argument)
+    except ValueError:
+        seconds = 0
+
+    if len(context.args) > 1 or not MIN_TIMER_SECONDS <= seconds <= MAX_TIMER_SECONDS:
+        await context.bot.send_message(
+            chat_id=chat.id,
+            text='Укажи целое число от 1 до 86400. Примеры: /timer 60, /timer 180',
+            reply_to_message_id=message.id,
+        )
+        logging.warning(
+            'Invalid timer argument',
+            extra={'chat_id': chat.id, 'command': 'timer', 'argument': ' '.join(context.args)},
+        )
+        return
+
+    logging.info(
+        'Timer started',
+        extra={'chat_id': chat.id, 'command': 'timer', 'argument': seconds},
+    )
     await context.bot.send_message(
-        chat_id = update.effective_chat.id, # type: ignore
-        text = text,
-        reply_to_message_id = update.effective_message.id) # type: ignore
-    await sleep(sec)
+        chat_id=chat.id,
+        text=f'Поставлен таймер на {seconds} {_seconds_word(seconds)}',
+        reply_to_message_id=message.id,
+    )
+    await sleep(seconds)
     await context.bot.send_message(
-        chat_id = update.effective_chat.id, # type: ignore
-        text = 'Время истекло',
-        reply_to_message_id = update.effective_message.id) # type: ignore
+        chat_id=chat.id,
+        text='Время истекло',
+        reply_to_message_id=message.id,
+    )
 
 async def duality(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Roll duality cubes. Example: /duality
@@ -106,7 +129,10 @@ async def duality(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     f_name = frame.f_code.co_name # type: ignore
     input: str = update.message.text # type: ignore
     text = dgh()
-    logging.info(f'"chat_id": "{update.effective_chat.id}", "function": "{f_name}", "argument": "{input}"') # type: ignore
+    logging.info(
+        'Duality dice rolled',
+        extra={'chat_id': update.effective_chat.id, 'command': f_name, 'argument': input}, # type: ignore
+    )
     await context.bot.send_message(
         chat_id = update.effective_chat.id, # type: ignore
         text = text,

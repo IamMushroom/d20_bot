@@ -6,12 +6,12 @@ import logging
 import log_format
 
 def main() -> None:
-    logging.info('"message": "Try to load token from TG_TOKEN env variable"')
+    logging.info('Loading token from TG_TOKEN environment variable')
     token = getenv('TG_TOKEN')
     if not token:
-        logging.critical('"message": "TG_TOKEN environment variable is not set"')
+        logging.critical('TG_TOKEN environment variable is not set')
         raise RuntimeError('TG_TOKEN environment variable is not set')
-    logging.info('"message": "Token has been successfully loaded"')
+    logging.info('Token has been successfully loaded')
     app = ApplicationBuilder().token(token).build()
     app.add_handler(CommandHandler("roll", commands.roll, filters.TEXT))
     app.add_handler(CommandHandler("roll20", commands.roll20, filters.TEXT))
@@ -20,13 +20,13 @@ def main() -> None:
     app.add_handler(CommandHandler("duality", commands.duality, filters.TEXT))
     app.add_handler(CommandHandler("dgh", commands.duality, filters.TEXT))
     app.add_handler(CommandHandler("daggerheart", commands.duality, filters.TEXT))
-    logging.info('"message": "Application started"')
+    logging.info('Application started')
     app.run_polling()
 
 if __name__ == '__main__':
     load_dotenv()
-    format: str = getenv('LOG_FORMAT', 'json')
-    logging.basicConfig(level=logging.INFO, format=log_format.format(format))
+    format_name = getenv('LOG_FORMAT', 'json')
+    log_format.configure_logging(format_name)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("telegram.ext.Application").setLevel(logging.WARNING)
     main()
