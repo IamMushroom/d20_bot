@@ -9,6 +9,16 @@ INVALID_ROLL_MESSAGE = (
     '⚠️ Неверный формат броска.\nПримеры: d20, 1d12 + 1d6, '
     '1d10 + 4, 2d20 - 1d4. Максимум: 100 кубов и 1000 граней'
 )
+HELP_MESSAGE = (
+    '🎲 Команды бота\n\n'
+    '/roll 2d6 — обычный бросок\n'
+    '/roll 1d20 + 4 — бросок с модификатором\n'
+    '/roll 2d6 - 1d4 — сложное выражение\n'
+    '/roll20 d20 — повышенный шанс минимума и максимума\n'
+    '/duality 5 — бросок Daggerheart с модификатором\n'
+    '/timer 60 — таймер в секундах\n'
+    '/help — эта справка'
+)
 MIN_TIMER_SECONDS = 1
 MAX_TIMER_SECONDS = 86_400
 
@@ -193,6 +203,20 @@ async def duality(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await context.bot.send_message(
         chat_id=chat.id,
         text=text,
+        reply_to_message_id=message.id,
+    )
+
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show available commands and usage examples."""
+    chat = update.effective_chat
+    message = update.effective_message
+    if chat is None or message is None:
+        return
+
+    await context.bot.send_message(
+        chat_id=chat.id,
+        text=HELP_MESSAGE,
         reply_to_message_id=message.id,
     )
 

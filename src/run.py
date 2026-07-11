@@ -1,9 +1,20 @@
 from dotenv import load_dotenv
 from os import getenv
+from telegram import BotCommand
 from telegram.ext import ApplicationBuilder, CommandHandler, filters
 import commands
 import logging
 import log_format
+
+
+async def set_bot_commands(application) -> None:
+    await application.bot.set_my_commands([
+        BotCommand('roll', 'бросить кубы'),
+        BotCommand('roll20', 'бросок с усиленными крайними значениями'),
+        BotCommand('duality', 'бросок Daggerheart'),
+        BotCommand('timer', 'поставить таймер'),
+        BotCommand('help', 'показать справку'),
+    ])
 
 def main() -> None:
     logging.info('Loading token from TG_TOKEN environment variable')
@@ -12,7 +23,15 @@ def main() -> None:
         logging.critical('TG_TOKEN environment variable is not set')
         raise RuntimeError('TG_TOKEN environment variable is not set')
     logging.info('Token has been successfully loaded')
-    app = ApplicationBuilder().token(token).concurrent_updates(16).build()
+    app = (
+        ApplicationBuilder()
+        .token(token)
+        .concurrent_updates(16)
+        .post_init(set_bot_commands)
+        .build()
+    )
+    app.add_handler(CommandHandler("start", commands.help_command))
+    app.add_handler(CommandHandler("help", commands.help_command))
     app.add_handler(CommandHandler("roll", commands.roll, filters.TEXT))
     app.add_handler(CommandHandler("roll20", commands.roll20, filters.TEXT))
     app.add_handler(CommandHandler("rolld20", commands.rolld20, filters.TEXT))
