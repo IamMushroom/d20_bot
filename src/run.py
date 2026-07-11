@@ -1,28 +1,52 @@
-from dotenv import load_dotenv
-from os import getenv
-from telegram.ext import ApplicationBuilder, CommandHandler, filters
-import commands
 import logging
+from os import getenv
+
+from dotenv import load_dotenv
+from telegram import BotCommand
+from telegram.ext import ApplicationBuilder, CommandHandler, filters
+
+import commands
 import log_format
 
+
+async def set_bot_commands(application) -> None:
+    await application.bot.set_my_commands(
+        [BotCommand(command.name, command.menu_description) for command in commands.COMMANDS]
+    )
+    logging.info('Application started')
+
+
 def main() -> None:
-    logging.info('"message": "Try to load token from TG_TOKEN env variable"')
-    token: str = getenv('TG_TOKEN', '0')
-    logging.error('"message": "Can\'t load token"') if token == 0 else logging.info('"message": "Token has been successfuly loaded"')
-    app = ApplicationBuilder().token(token).build()
-    app.add_handler(CommandHandler("roll", commands.roll, filters.TEXT))
-    app.add_handler(CommandHandler("rolld20", commands.rolld20, filters.TEXT))
-    app.add_handler(CommandHandler("timer", commands.timer, filters.TEXT))
-    app.add_handler(CommandHandler("duality", commands.duality, filters.TEXT))
-    app.add_handler(CommandHandler("dgh", commands.duality, filters.TEXT))
-    app.add_handler(CommandHandler("daggerheart", commands.duality, filters.TEXT))
-    logging.info('"message": "Application started"')
+    logging.info('Loading token from TG_TOKEN environment variable')
+    token = getenv('TG_TOKEN')
+    if not token:
+        logging.critical('TG_TOKEN environment variable is not set')
+        raise RuntimeError('TG_TOKEN environment variable is not set')
+    logging.info('Token has been successfully loaded')
+    app = (
+        ApplicationBuilder().token(token).concurrent_updates(16).post_init(set_bot_commands).build()
+    )
+    for command in commands.COMMANDS:
+        for name in (command.name, *command.aliases):
+            app.add_handler(
+                CommandHandler(
+                    name, commands.observed_callback(name, command.callback), filters.TEXT
+                )
+            )
+    app.add_error_handler(commands.handle_error)
+    logging.info('Starting application')
     app.run_polling()
 
-if __name__ == '__main__':
+
+def bootstrap() -> None:
+    """Load configuration, set up logging and start the bot."""
     load_dotenv()
-    format: str = getenv('LOG_FORMAT', 'json')
-    logging.basicConfig(level=logging.INFO, format=log_format.format(format))
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("telegram.ext.Application").setLevel(logging.WARNING)
+    format_name = getenv('LOG_FORMAT', 'json')
+    log_format.configure_logging(format_name)
+    logging.getLogger('httpx').setLevel(logging.WARNING)
+    logging.getLogger('telegram.ext.Application').setLevel(logging.WARNING)
     main()
+
+
+if __name__ == '__main__':  # pragma: no cover
+    bootstrap()

@@ -1,16 +1,28 @@
 services:
   d20:
-    image: immushroom/d20_bot:${DOCKER_TAG}
-    #container_name: d20_bot
+    image: immushroom/d20_bot:${DOCKER_TAG:-latest}
     build: .
+    init: true
+    read_only: true
     environment:
-      - TG_TOKEN=${TG_TOKEN}
-    restart: always
+      TG_TOKEN: ${TG_TOKEN:?Set TG_TOKEN in .env}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
     deploy:
       resources:
         limits:
-          cpus: '0.1'
           memory: 150M
         reservations:
-          cpus: '0.005'
           memory: 20M

@@ -1,0 +1,29 @@
+name: Tests & Ruff
+
+on:
+  workflow_call:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, raspberry]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Run Ruff and pytest in Python 3.14
+        run: docker build --target test --tag d20-bot:test .
+
+      - name: Build runtime image
+        run: docker build --tag d20-bot:runtime-test .
+

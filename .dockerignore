@@ -1,0 +1,17 @@
+.git
+.github
+.vscode
+.agents
+.codex
+.env*
+.coverage*
+.pytest_cache
+.cache
+htmlcov
+__pycache__
+*.py[cod]
+*.log
+venv
+.venv
+README.md
+docker-compose.yaml
