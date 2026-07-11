@@ -1,7 +1,7 @@
 from random import randint
 from typing import Callable, Optional, Tuple
 
-from dice.expression import parse_roll_expression
+from dice.expression import DiceTerm, parse_roll_expression
 
 Roller = Callable[[int, int], Tuple[int, ...]]
 
@@ -27,19 +27,18 @@ def evaluate_roll_expression(expression: str, roller: Roller) -> Optional[str]:
 
     total = 0
     details = []
-    for index, (sign, term) in enumerate(terms):
-        operator = '− ' if sign < 0 else ('+ ' if index > 0 else '')
-        if isinstance(term, tuple):
-            count, sides = term
-            rolls = roller(count, sides)
+    for index, term in enumerate(terms):
+        operator = '− ' if term.sign < 0 else ('+ ' if index > 0 else '')
+        if isinstance(term, DiceTerm):
+            rolls = roller(term.count, term.sides)
             subtotal = sum(rolls)
-            total += sign * subtotal
+            total += term.sign * subtotal
             details.append(
-                f'• {operator}{count}d{sides}: {" + ".join(map(str, rolls))} = {subtotal}'
+                f'• {operator}{term.count}d{term.sides}: {" + ".join(map(str, rolls))} = {subtotal}'
             )
         else:
-            total += sign * term
-            details.append(f'• {operator}{term}')
+            total += term.sign * term.value
+            details.append(f'• {operator}{term.value}')
 
     return f'🎲 Итог: {total}\n🧮 Расчёт:\n' + '\n'.join(details)
 

@@ -1,17 +1,20 @@
 import pytest
 
-from dice.expression import normalize_input, parse_roll_expression
+from dice.expression import DiceTerm, ModifierTerm, normalize_input, parse_roll_expression
 
 
 @pytest.mark.parametrize(
     ('expression', 'expected'),
     [
-        ('d20', ((1, (1, 20)),)),
-        ('2D6', ((1, (2, 6)),)),
-        ('8к10', ((1, (8, 10)),)),
-        ('1d12 + 1d6', ((1, (1, 12)), (1, (1, 6)))),
-        ('1d10 - 4', ((1, (1, 10)), (-1, 4))),
-        ('2d20 - 1d4 + 3', ((1, (2, 20)), (-1, (1, 4)), (1, 3))),
+        ('d20', (DiceTerm(1, 20),)),
+        ('2D6', (DiceTerm(2, 6),)),
+        ('8к10', (DiceTerm(8, 10),)),
+        ('1d12 + 1d6', (DiceTerm(1, 12), DiceTerm(1, 6))),
+        ('1d10 - 4', (DiceTerm(1, 10), ModifierTerm(4, -1))),
+        (
+            '2d20 - 1d4 + 3',
+            (DiceTerm(2, 20), DiceTerm(1, 4, -1), ModifierTerm(3)),
+        ),
     ],
 )
 def test_parse_valid_expression(expression, expected):

@@ -1,4 +1,5 @@
 import re
+from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 MAX_DICE_COUNT = 100
@@ -8,10 +9,21 @@ MAX_EXPRESSION_TERMS = 20
 
 _DICE_EXPRESSION = re.compile(r'^(\d*)[dDкК](\d+)$')
 
-DiceTerm = Tuple[int, int]
-ExpressionTerm = Union[DiceTerm, int]
-SignedExpressionTerm = Tuple[int, ExpressionTerm]
-RollExpression = Tuple[SignedExpressionTerm, ...]
+@dataclass(frozen=True)
+class DiceTerm:
+    count: int
+    sides: int
+    sign: int = 1
+
+
+@dataclass(frozen=True)
+class ModifierTerm:
+    value: int
+    sign: int = 1
+
+
+ExpressionTerm = Union[DiceTerm, ModifierTerm]
+RollExpression = Tuple[ExpressionTerm, ...]
 
 
 def normalize_input(string: str) -> Tuple[int, int]:
@@ -50,7 +62,7 @@ def parse_roll_expression(string: str) -> Optional[RollExpression]:
             total_dice += dice[0]
             if total_dice > MAX_DICE_COUNT:
                 return None
-            terms.append((sign, dice))
+            terms.append(DiceTerm(count=dice[0], sides=dice[1], sign=sign))
             continue
 
         if not raw_term.isdecimal():
@@ -58,7 +70,7 @@ def parse_roll_expression(string: str) -> Optional[RollExpression]:
         modifier = int(raw_term)
         if modifier > MAX_MODIFIER:
             return None
-        terms.append((sign, modifier))
+        terms.append(ModifierTerm(value=modifier, sign=sign))
 
     if position != len(expression) or not terms or len(terms) > MAX_EXPRESSION_TERMS:
         return None
