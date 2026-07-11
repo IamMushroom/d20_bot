@@ -1,5 +1,8 @@
 .env
 .agents
+.pytest_cache
+.coverage
+pytest.ini
 pyvenv.cfg
 lib64
 lib
