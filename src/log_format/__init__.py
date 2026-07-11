@@ -2,7 +2,7 @@ import json
 import logging
 from datetime import datetime, timezone
 
-EXTRA_FIELDS = ('chat_id', 'command', 'argument')
+EXTRA_FIELDS = ('chat_id', 'command', 'argument', 'timer_id')
 
 
 class JsonFormatter(logging.Formatter):

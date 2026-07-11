@@ -27,6 +27,7 @@ async def _finish_timer(
     chat_id: int,
     message_id: int,
     seconds: int,
+    timer_id: str,
 ) -> None:
     await sleep(seconds)
     await context.bot.send_message(
@@ -36,7 +37,12 @@ async def _finish_timer(
     )
     logging.info(
         'Timer completed',
-        extra={'chat_id': chat_id, 'command': 'timer', 'argument': seconds},
+        extra={
+            'chat_id': chat_id,
+            'command': 'timer',
+            'argument': seconds,
+            'timer_id': timer_id,
+        },
     )
 
 
@@ -123,9 +129,15 @@ async def timer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         return
 
+    timer_id = f'{chat.id}:{message.id}'
     logging.info(
         'Timer started',
-        extra={'chat_id': chat.id, 'command': 'timer', 'argument': seconds},
+        extra={
+            'chat_id': chat.id,
+            'command': 'timer',
+            'argument': seconds,
+            'timer_id': timer_id,
+        },
     )
     await context.bot.send_message(
         chat_id=chat.id,
@@ -133,9 +145,9 @@ async def timer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         reply_to_message_id=message.id,
     )
     context.application.create_task(
-        _finish_timer(context, chat.id, message.id, seconds),
+        _finish_timer(context, chat.id, message.id, seconds, timer_id),
         update=update,
-        name=f'timer-{chat.id}-{message.id}',
+        name=f'timer-{timer_id}',
     )
 
 async def duality(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

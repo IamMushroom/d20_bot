@@ -20,6 +20,7 @@ def test_json_formatter_produces_valid_structured_log():
     record.chat_id = 123
     record.command = 'roll'
     record.argument = '1d20 + "4"'
+    record.timer_id = '123:456'
 
     payload = json.loads(JsonFormatter().format(record))
 
@@ -29,6 +30,7 @@ def test_json_formatter_produces_valid_structured_log():
     assert payload['chat_id'] == 123
     assert payload['command'] == 'roll'
     assert payload['argument'] == '1d20 + "4"'
+    assert payload['timer_id'] == '123:456'
     assert payload['datetime'].endswith('+00:00')
 
 
