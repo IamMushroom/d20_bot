@@ -66,17 +66,11 @@ jobs:
             docker compose -p "$COMPOSE_PROJECT" logs --no-color d20
             exit 1
           fi
-          for _ in $(seq 1 18); do
-            STATUS=$(docker inspect --format '{{.State.Health.Status}}' "$CONTAINER_ID")
-            if [[ "$STATUS" == "healthy" ]]; then
-              exit 0
-            fi
-            if [[ "$STATUS" == "unhealthy" ]]; then
-              break
-            fi
-            sleep 5
-          done
-          docker inspect --format '{{json .State.Health}}' "$CONTAINER_ID"
+          sleep 10
+          if [[ "$(docker inspect --format '{{.State.Running}}' "$CONTAINER_ID")" == "true" ]]; then
+            exit 0
+          fi
+          docker inspect --format '{{json .State}}' "$CONTAINER_ID"
           docker compose -p "$COMPOSE_PROJECT" logs --no-color d20
           exit 1
 

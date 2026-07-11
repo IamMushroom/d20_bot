@@ -7,15 +7,12 @@ from telegram.ext import ApplicationBuilder, CommandHandler, filters
 
 import commands
 import log_format
-from healthcheck import heartbeat, mark_ready
 
 
 async def set_bot_commands(application) -> None:
     await application.bot.set_my_commands(
         [BotCommand(command.name, command.menu_description) for command in commands.COMMANDS]
     )
-    mark_ready()
-    application.create_task(heartbeat(), name='healthcheck-heartbeat')
 
 
 def main() -> None:

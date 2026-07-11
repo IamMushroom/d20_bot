@@ -1,10 +1,9 @@
 import asyncio
 import re
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import commands
-import run
 from run import set_bot_commands
 
 
@@ -22,12 +21,8 @@ def test_help_message_is_built_from_registry():
             assert line in commands.HELP_MESSAGE
 
 
-def test_set_bot_commands_uses_registry(monkeypatch):
-    application = SimpleNamespace(
-        bot=SimpleNamespace(set_my_commands=AsyncMock()), create_task=Mock()
-    )
-    mark_ready = Mock()
-    monkeypatch.setattr(run, 'mark_ready', mark_ready)
+def test_set_bot_commands_uses_registry():
+    application = SimpleNamespace(bot=SimpleNamespace(set_my_commands=AsyncMock()))
 
     asyncio.run(set_bot_commands(application))
 
@@ -38,7 +33,3 @@ def test_set_bot_commands_uses_registry(monkeypatch):
     assert [command.description for command in registered] == [
         command.menu_description for command in commands.COMMANDS
     ]
-    mark_ready.assert_called_once_with()
-    heartbeat_task = application.create_task.call_args.args[0]
-    heartbeat_task.close()
-    application.create_task.assert_called_once_with(heartbeat_task, name='healthcheck-heartbeat')

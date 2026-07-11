@@ -31,7 +31,4 @@ COPY --chown=bot:bot src ./src
 
 USER bot
 
-HEALTHCHECK --interval=15s --timeout=3s --start-period=15s --retries=3 \
-    CMD ["python", "src/healthcheck.py"]
-
 CMD [".venv/bin/python", "src/run.py"]
