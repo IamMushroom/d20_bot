@@ -111,9 +111,9 @@ uv run pytest
 
 GitHub Actions запускает на self-hosted Raspberry Pi Ruff, тесты в `python:3.14-alpine` и smoke-build runtime-образа. После deploy workflow проверяет, что контейнер не завершился при инициализации. Публикуемые образы содержат SBOM и provenance attestations. Workflow запуска бота и workflow публикации образа выполняются только после успешных проверок. Из соображений безопасности fork pull request не запускает код на self-hosted runner.
 
-Dependabot раз в неделю проверяет Python-пакеты, GitHub Actions и Docker base image. Все экосистемы объединяются в один multi-ecosystem pull request. Deploy запускается только для push в ветки `dev` и `prd`.
+Dependabot раз в неделю проверяет Python-пакеты, GitHub Actions и Docker base image. Все экосистемы объединяются в один multi-ecosystem pull request. Push в `dev` запускает dev-deploy; push в `prd` сам по себе ничего не разворачивает.
 
-Тег `vX.Y.Z` должен совпадать с версией в `pyproject.toml`. Такой тег публикует ARM64-образы в Docker Hub и GHCR, подписывает их через Cosign и создаёт GitHub Release.
+Тег `vX.Y.Z` должен совпадать с версией в `pyproject.toml`. Такой тег публикует ARM64-образы в Docker Hub и GHCR, подписывает их через Cosign, создаёт GitHub Release и затем разворачивает в production образ с этим релизным тегом.
 
 Требования к runner:
 
