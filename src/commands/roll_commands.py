@@ -22,18 +22,7 @@ async def _handle_roll(
     if chat is None or message is None:
         return
 
-    expression = ' '.join(context.args)
-    if not expression:
-        await context.bot.send_message(
-            chat_id=chat.id,
-            text=f'⚠️ Нет аргумента.\nПримеры: /{command_name} 2d6, /{command_name} 1d20 + 4',
-            reply_to_message_id=message.id,
-        )
-        logging.warning(
-            'Roll command has no argument',
-            extra={'chat_id': chat.id, 'command': command_name},
-        )
-        return
+    expression = ' '.join(context.args) or 'd20'
 
     text = evaluate_roll_expression(expression, roller)
     if text is None:

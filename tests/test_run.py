@@ -32,3 +32,33 @@ def test_main_rejects_missing_token(monkeypatch):
 
     with pytest.raises(RuntimeError, match='TG_TOKEN environment variable is not set'):
         run.main()
+
+
+def test_bootstrap_configures_environment_and_starts_bot(monkeypatch):
+    load_dotenv = Mock()
+    configure_logging = Mock()
+    main = Mock()
+    loggers = {
+        'httpx': Mock(),
+        'telegram.ext.Application': Mock(),
+    }
+    original_get_logger = run.logging.getLogger
+
+    def get_logger(name=None):
+        return loggers.get(name, original_get_logger(name))
+
+    monkeypatch.setattr(run, 'load_dotenv', load_dotenv)
+    monkeypatch.setattr(
+        run, 'getenv', lambda name, default=None: 'json' if name == 'LOG_FORMAT' else default
+    )
+    monkeypatch.setattr(run.log_format, 'configure_logging', configure_logging)
+    monkeypatch.setattr(run.logging, 'getLogger', get_logger)
+    monkeypatch.setattr(run, 'main', main)
+
+    run.bootstrap()
+
+    load_dotenv.assert_called_once_with()
+    configure_logging.assert_called_once_with('json')
+    loggers['httpx'].setLevel.assert_called_once_with(run.logging.WARNING)
+    loggers['telegram.ext.Application'].setLevel.assert_called_once_with(run.logging.WARNING)
+    main.assert_called_once_with()

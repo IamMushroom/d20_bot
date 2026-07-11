@@ -33,10 +33,15 @@ def main() -> None:
     app.run_polling()
 
 
-if __name__ == '__main__':
+def bootstrap() -> None:
+    """Load configuration, set up logging and start the bot."""
     load_dotenv()
     format_name = getenv('LOG_FORMAT', 'json')
     log_format.configure_logging(format_name)
     logging.getLogger('httpx').setLevel(logging.WARNING)
     logging.getLogger('telegram.ext.Application').setLevel(logging.WARNING)
     main()
+
+
+if __name__ == '__main__':  # pragma: no cover
+    bootstrap()

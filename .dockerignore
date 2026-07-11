@@ -7,7 +7,6 @@
 .coverage*
 .pytest_cache
 htmlcov
-tests
 __pycache__
 *.py[cod]
 *.log
@@ -15,5 +14,3 @@ venv
 .venv
 README.md
 docker-compose.yaml
-requirements-dev.txt
-pytest.ini

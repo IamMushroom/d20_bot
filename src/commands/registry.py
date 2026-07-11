@@ -25,6 +25,7 @@ COMMANDS = (
         callback=roll,
         menu_description='бросить кубы',
         help_lines=(
+            '/roll — бросить d20',
             '/roll 2d6 — обычный бросок',
             '/roll 1d20 + 4 — бросок с модификатором',
             '/roll 2d6 - 1d4 — сложное выражение',

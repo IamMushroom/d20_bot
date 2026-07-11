@@ -3,6 +3,8 @@ import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
+import pytest
+
 import commands
 
 
@@ -31,6 +33,50 @@ def test_roll_handles_effective_message_without_direct_message():
     assert sent['chat_id'] == 123
     assert sent['reply_to_message_id'] == 456
     assert sent['text'].startswith('🎲 Итог:')
+
+
+def test_roll_without_argument_defaults_to_d20():
+    update = make_update(text='/roll')
+    context = make_context()
+
+    asyncio.run(commands.roll(update, context))
+
+    sent = context.bot.send_message.await_args.kwargs
+    assert sent['text'].startswith('🎲 Итог:')
+    assert '• 1d20:' in sent['text']
+
+
+def test_roll_rejects_invalid_expression():
+    update = make_update(text='/roll 1d6 * 2')
+    context = make_context(('1d6', '*', '2'))
+
+    asyncio.run(commands.roll(update, context))
+
+    sent = context.bot.send_message.await_args.kwargs
+    assert '⚠️ Неверный формат броска' in sent['text']
+
+
+@pytest.mark.parametrize('handler', [commands.roll20, commands.rolld20])
+def test_weighted_roll_aliases(handler):
+    update = make_update(text='/roll20 d20')
+    context = make_context(('d20',))
+
+    asyncio.run(handler(update, context))
+
+    assert context.bot.send_message.await_args.kwargs['text'].startswith('🎲 Итог:')
+
+
+@pytest.mark.parametrize(
+    'handler',
+    [commands.roll, commands.timer, commands.duality, commands.help_command],
+)
+def test_handlers_ignore_update_without_effective_context(handler):
+    update = SimpleNamespace(effective_chat=None, effective_message=None)
+    context = make_context()
+
+    asyncio.run(handler(update, context))
+
+    context.bot.send_message.assert_not_awaited()
 
 
 def test_help_sends_command_reference():
@@ -70,6 +116,25 @@ def test_timer_rejects_invalid_argument():
     assert '⚠️' in context.bot.send_message.await_args.kwargs['text']
 
 
+@pytest.mark.parametrize('args', [('nope',), ('1', '2')])
+def test_timer_rejects_non_numeric_or_extra_arguments(args):
+    update = make_update(text='/timer ' + ' '.join(args))
+    context = make_context(args)
+
+    asyncio.run(commands.timer(update, context))
+
+    context.application.create_task.assert_not_called()
+    assert '⚠️' in context.bot.send_message.await_args.kwargs['text']
+
+
+@pytest.mark.parametrize(
+    ('seconds', 'word'),
+    [(1, 'секунду'), (2, 'секунды'), (5, 'секунд'), (11, 'секунд'), (21, 'секунду')],
+)
+def test_seconds_word(seconds, word):
+    assert commands.timer_commands._seconds_word(seconds) == word
+
+
 def test_finish_timer_sends_notification_and_logs_completion(monkeypatch, caplog):
     context = make_context()
     monkeypatch.setattr(commands.timer_commands, 'sleep', AsyncMock())
@@ -106,6 +171,15 @@ def test_duality_rejects_invalid_modifier():
     assert '⚠️' in context.bot.send_message.await_args.kwargs['text']
 
 
+def test_duality_rejects_extra_arguments():
+    update = make_update(text='/duality 1 2')
+    context = make_context(('1', '2'))
+
+    asyncio.run(commands.duality(update, context))
+
+    assert '⚠️' in context.bot.send_message.await_args.kwargs['text']
+
+
 def test_error_handler_supports_edited_update(monkeypatch, caplog):
     class FakeUpdate:
         effective_chat = SimpleNamespace(id=123)
@@ -120,3 +194,26 @@ def test_error_handler_supports_edited_update(monkeypatch, caplog):
 
     assert 'Unhandled exception while processing Telegram update' in caplog.messages
     assert context.bot.send_message.await_args.kwargs['reply_to_message_id'] == 456
+
+
+def test_error_handler_ignores_non_update():
+    context = make_context()
+    context.error = None
+
+    asyncio.run(commands.handle_error(object(), context))
+
+    context.bot.send_message.assert_not_awaited()
+
+
+def test_error_handler_ignores_update_without_chat(monkeypatch):
+    class FakeUpdate:
+        effective_chat = None
+        effective_message = None
+
+    monkeypatch.setattr(commands.error_commands, 'Update', FakeUpdate)
+    context = make_context()
+    context.error = None
+
+    asyncio.run(commands.handle_error(FakeUpdate(), context))
+
+    context.bot.send_message.assert_not_awaited()

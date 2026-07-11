@@ -8,29 +8,17 @@ permissions:
   contents: read
 
 jobs:
-  pytest:
-    runs-on: ubuntu-latest
+  checks:
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, raspberry]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.14'
-          cache: pip
-          cache-dependency-path: |
-            requirements.txt
-            requirements-dev.txt
+      - name: Run Ruff and pytest in Python 3.14
+        run: docker build --target test --tag d20-bot:test .
 
-      - name: Install dependencies
-        run: python -m pip install -r requirements-dev.txt
-
-      - name: Lint
-        run: python -m ruff check .
-
-      - name: Check formatting
-        run: python -m ruff format --check .
-
-      - name: Run tests
-        run: python -m pytest
+      - name: Build runtime image
+        run: docker build --tag d20-bot:runtime-test .

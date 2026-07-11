@@ -8,7 +8,8 @@
 
 ## Команды
 
-- `/roll 2d6` — обычный бросок.
+- `/roll` — обычный бросок d20.
+- `/roll 2d6` — бросок указанных кубов.
 - `/roll 1d20 + 4` — бросок с числовым модификатором.
 - `/roll 1d12 + 1d6 - 2` — выражение из нескольких кубов и модификаторов.
 - `/roll20 d20` — бросок с повышенной вероятностью минимального и максимального значения.
@@ -69,7 +70,7 @@ python src\run.py
 
 ## Docker Compose
 
-Создайте `.env`:
+Скопируйте `.env.example` в `.env` и замените токен:
 
 ```dotenv
 TG_TOKEN=<telegram-token>
@@ -98,15 +99,19 @@ python -m ruff format --check .
 python -m pytest
 ```
 
-Отчёт о покрытии ветвей:
-
-```shell
-python -m pytest --cov=src --cov-branch --cov-report=term-missing
-```
+Обычный запуск `pytest` сразу строит отчёт о branch coverage. Минимальный допустимый уровень — 90%.
 
 ## CI/CD
 
-GitHub Actions запускает тесты на Python 3.14. Workflow запуска бота и workflow публикации Docker-образа выполняются только после успешного тестового job.
+GitHub Actions запускает на self-hosted Raspberry Pi Ruff, тесты в `python:3.14-alpine` и smoke-build runtime-образа. Workflow запуска бота и workflow публикации образа выполняются только после успешных проверок. Из соображений безопасности fork pull request не запускает код на self-hosted runner.
+
+Требования к runner:
+
+- лейблы `self-hosted` и `raspberry`;
+- Docker Engine, Buildx и Docker Compose v2;
+- доступ runner-пользователя к Docker daemon;
+- `TG_TOKEN` в GitHub Environment с именем ветки;
+- `DOCKER_HUB_TOKEN`, `DOCKER_HUB_NAME` и environment `prd` для публикации образа.
 
 ## Структура проекта
 

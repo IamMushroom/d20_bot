@@ -1,62 +1,51 @@
 name: Run bot
+
 on:
   push:
     paths-ignore:
       - '**/README.md'
       - '.github/workflows/push_image.yaml'
 
+permissions:
+  contents: read
+
 jobs:
   tests:
     uses: ./.github/workflows/tests.yaml
 
-  prepare:
+  deploy:
     needs: tests
     runs-on: [self-hosted, raspberry]
     environment:
       name: ${{ github.ref_name }}
-    outputs:
-      branch: ${{ steps.set_variables.outputs.branch }}
-      tag: ${{ steps.set_variables.outputs.tag }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      - name: Set variables
+
+      - name: Set deployment variables
+        id: variables
         shell: bash
         run: |
-          BRANCH=$(git branch | grep '*' | cut -d' ' -f2)
-          echo "branch=$BRANCH"
-          if [[ $BRANCH == 'dev' ]]; then TAG=$(git rev-parse --short "$GITHUB_SHA"); else TAG='latest'; fi
-          echo "tag=$TAG"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
-        id: set_variables
-      - name: Stop docker compose
-        run: docker compose -p "d20_bot_${{ steps.set_variables.outputs.branch }}" down
-  build:
-    runs-on: [self-hosted, raspberry]
-    environment:
-      name: ${{ needs.prepare.outputs.branch }}
-    needs:
-      - prepare
-    steps:
+          PROJECT=$(echo "$GITHUB_REF_NAME" | tr '/[:upper:]' '_[:lower:]')
+          if [[ "$GITHUB_REF_NAME" == "dev" ]]; then
+            TAG=$(git rev-parse --short "$GITHUB_SHA")
+          else
+            TAG=latest
+          fi
+          echo "project=d20_bot_${PROJECT}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
       - name: Build image
-        uses: docker/build-push-action@v5
-        with:
-          push: false
-          tags: immushroom/d20_bot:${{ needs.prepare.outputs.tag }}
-          context: .
-  run:
-    runs-on: [self-hosted, raspberry]
-    environment:
-      name: ${{ needs.prepare.outputs.branch }}
-    needs:
-      - prepare
-      - build
-    steps:
-      - name: Run
+        run: docker build --tag "immushroom/d20_bot:${{ steps.variables.outputs.tag }}" .
+
+      - name: Deploy
         env:
-          DOCKER_TAG: ${{ needs.prepare.outputs.tag }}
+          DOCKER_TAG: ${{ steps.variables.outputs.tag }}
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
-        run: docker compose -p "d20_bot_${{ needs.prepare.outputs.branch }}" up -d
+        run: >-
+          docker compose
+          -p "${{ steps.variables.outputs.project }}"
+          up -d --remove-orphans
+
       - name: Prune unused images
-        run: echo 'y' | docker image prune
+        run: docker image prune --force
