@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - dev
-      - prd
     paths-ignore:
       - '**/README.md'
       - '.github/workflows/push_image.yaml'
@@ -34,11 +33,7 @@ jobs:
         shell: bash
         run: |
           PROJECT=$(echo "$GITHUB_REF_NAME" | tr '/[:upper:]' '_[:lower:]')
-          if [[ "$GITHUB_REF_NAME" == "dev" ]]; then
-            TAG=$(git rev-parse --short "$GITHUB_SHA")
-          else
-            TAG=latest
-          fi
+          TAG=$(git rev-parse --short "$GITHUB_SHA")
           echo "project=d20_bot_${PROJECT}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
