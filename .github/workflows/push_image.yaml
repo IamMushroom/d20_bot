@@ -6,7 +6,11 @@ on:
       - "*.*.*"
 
 jobs:
+  tests:
+    uses: ./.github/workflows/tests.yaml
+
   build-and-push:
+    needs: tests
     runs-on: [self-hosted, raspberry]
     environment: prd
     permissions:

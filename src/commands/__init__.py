@@ -34,6 +34,10 @@ async def _finish_timer(
         text='⏰ Время истекло!',
         reply_to_message_id=message_id,
     )
+    logging.info(
+        'Timer completed',
+        extra={'chat_id': chat_id, 'command': 'timer', 'argument': seconds},
+    )
 
 
 async def _handle_roll(

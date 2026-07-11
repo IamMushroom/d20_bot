@@ -6,7 +6,11 @@ on:
       - '.github/workflows/push_image.yaml'
 
 jobs:
+  tests:
+    uses: ./.github/workflows/tests.yaml
+
   prepare:
+    needs: tests
     runs-on: [self-hosted, raspberry]
     environment:
       name: ${{ github.ref_name }}
