@@ -62,6 +62,11 @@ async def rolld20(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Roll cubes with increased chances for minimum and maximum values."""
     await _handle_roll(update, context, roll_d20, 'rolld20')
 
+
+async def roll20(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Roll cubes with increased chances for minimum and maximum values."""
+    await _handle_roll(update, context, roll_d20, 'roll20')
+
 async def timer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Set timer. Example: /timer 180, /timer
     """

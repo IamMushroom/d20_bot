@@ -1,7 +1,8 @@
 # Simple telegram bot for dnd dices roll
 ## Available functions:
  - /roll - Roll cubes. Example: /roll 2d6, /roll 8к20
- - /rolld20 - Roll cubes with increased chances for max and min roll. Example: /rolld20 2d6, /rolld20 8к20
+ - /roll20 - Roll cubes with increased chances for max and min roll. Example: /roll20 2d6, /roll20 8к20
+ - /rolld20 - Alias for /roll20
  - /timer - Set timer. Write time in seconds after command. Example: /timer 180 - set timer for 180 seconds
  - /duality - Duality roll from Daggerheart
 
