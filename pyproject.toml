@@ -1,6 +1,6 @@
 [project]
 name = "d20-bot"
-version = "0.11.0"
+version = "0.11.1"
 description = "Telegram dice bot for tabletop role-playing games"
 requires-python = ">=3.14"
 dependencies = [
