@@ -1,64 +1,66 @@
-from dice.roll import roll_regular, roll_d20, dgh
-from utils import normalize_input
+from dice.roll import Roller, dgh, evaluate_roll_expression, roll_d20, roll_regular
 from telegram import Update
 from telegram.ext import ContextTypes
-from time import sleep
+from asyncio import sleep
 import logging
 import inspect
 
-async def roll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Roll cubes. Example: /roll 2d6, /roll 8к20
-    """
-    frame = inspect.currentframe()
-    f_name = frame.f_code.co_name # type: ignore
-    input: str = update.message.text # type: ignore
-    try: input = input.split(' ')[1]
-    except:
-        await context.bot.send_message(
-            chat_id = update.effective_chat.id, # type: ignore
-            text = 'Нет аргумента. Примеры: /roll 2d6, /roll 8к20',
-            reply_to_message_id = update.effective_message.id) # type: ignore
-        logging.error(f'"chat_id": "{update.effective_chat.id}", "function": "{f_name}", "message": "leak of argument"') # type: ignore
+INVALID_ROLL_MESSAGE = (
+    'Неверный формат броска. Примеры: d20, 1d12 + 1d6, '
+    '1d10 + 4, 2d20 - 1d4. Максимум: 100 кубов и 1000 граней'
+)
+
+
+async def _handle_roll(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    roller: Roller,
+    command_name: str,
+) -> None:
+    chat = update.effective_chat
+    message = update.effective_message
+    if chat is None or message is None:
         return
-    ni = normalize_input(input)
-    if ni[0] == 0:
-        text = 'Не верный разделитель. Поддерживается либо латинская d (3d12), либо русская к (8к10)'
-        logging.warning(f'"chat_id": "{update.effective_chat.id}", "function": "{f_name}", "message": "wrong delimeter", "argument": "{input}"') # type: ignore
+
+    expression = ' '.join(context.args)
+    if not expression:
+        await context.bot.send_message(
+            chat_id=chat.id,
+            text=f'Нет аргумента. Примеры: /{command_name} 2d6, /{command_name} 1d20 + 4',
+            reply_to_message_id=message.id,
+        )
+        logging.error(
+            f'"chat_id": "{chat.id}", "function": "{command_name}", "message": "lack of argument"'
+        )
+        return
+
+    text = evaluate_roll_expression(expression, roller)
+    if text is None:
+        text = INVALID_ROLL_MESSAGE
+        logging.warning(
+            f'"chat_id": "{chat.id}", "function": "{command_name}", '
+            f'"message": "invalid expression", "argument": "{expression}"'
+        )
     else:
-        r = roll_regular(ni[0], ni[1])
-        text = f'Your roll: {sum(r)} ({" + ".join(map(str, r))})'
-        logging.info(f'"chat_id": "{update.effective_chat.id}", "function": "{f_name}", "argument": "{input}"') # type: ignore
+        logging.info(
+            f'"chat_id": "{chat.id}", "function": "{command_name}", "argument": "{expression}"'
+        )
+
     await context.bot.send_message(
-        chat_id = update.effective_chat.id, # type: ignore
-        text = text,
-        reply_to_message_id = update.effective_message.id) # type: ignore
+        chat_id=chat.id,
+        text=text,
+        reply_to_message_id=message.id,
+    )
+
+
+async def roll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Roll cubes using a regular random distribution."""
+    await _handle_roll(update, context, roll_regular, 'roll')
+
 
 async def rolld20(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Roll cubes with increased chances for max and min roll. Example: /rolld20 2d6, /rolld20 8к20
-    """
-    frame = inspect.currentframe()
-    f_name = frame.f_code.co_name # type: ignore
-    input: str = update.message.text # type: ignore
-    try: input = input.split(' ')[1]
-    except:
-        await context.bot.send_message(
-            chat_id = update.effective_chat.id, # type: ignore
-            text = 'Нет аргумента. Примеры: /roll 2d6, /roll 8к20',
-            reply_to_message_id = update.effective_message.id) # type: ignore
-        logging.error(f'"chat_id": "{update.effective_chat.id}", "function": "{f_name}", "message": "leak of argument"') # type: ignore
-        return
-    ni = normalize_input(input)
-    if ni[0] == 0:
-        text = 'Не верный разделитель. Поддерживается либо латинская d (3d12), либо русская к (8к10)'
-        logging.warning(f'"chat_id": "{update.effective_chat.id}", "function": "{f_name}", "message": "wrong delimeter", "argument": "{input}"') # type: ignore
-    else:
-        r = roll_d20(ni[0], ni[1])
-        text = f'Your roll: {sum(r)} ({" + ".join(map(str, r))})'
-        logging.info(f'"chat_id": "{update.effective_chat.id}", "function": "{f_name}", "argument": "{input}"') # type: ignore
-    await context.bot.send_message(
-        chat_id = update.effective_chat.id, # type: ignore
-        text = text,
-        reply_to_message_id = update.effective_message.id) # type: ignore
+    """Roll cubes with increased chances for minimum and maximum values."""
+    await _handle_roll(update, context, roll_d20, 'rolld20')
 
 async def timer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Set timer. Example: /timer 180, /timer
@@ -86,7 +88,7 @@ async def timer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id, # type: ignore
         text = text,
         reply_to_message_id = update.effective_message.id) # type: ignore
-    sleep(sec)
+    await sleep(sec)
     await context.bot.send_message(
         chat_id = update.effective_chat.id, # type: ignore
         text = 'Время истекло',

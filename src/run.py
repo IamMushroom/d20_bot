@@ -7,8 +7,11 @@ import log_format
 
 def main() -> None:
     logging.info('"message": "Try to load token from TG_TOKEN env variable"')
-    token: str = getenv('TG_TOKEN', '0')
-    logging.error('"message": "Can\'t load token"') if token == 0 else logging.info('"message": "Token has been successfuly loaded"')
+    token = getenv('TG_TOKEN')
+    if not token:
+        logging.critical('"message": "TG_TOKEN environment variable is not set"')
+        raise RuntimeError('TG_TOKEN environment variable is not set')
+    logging.info('"message": "Token has been successfully loaded"')
     app = ApplicationBuilder().token(token).build()
     app.add_handler(CommandHandler("roll", commands.roll, filters.TEXT))
     app.add_handler(CommandHandler("rolld20", commands.rolld20, filters.TEXT))
