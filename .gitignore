@@ -1,12 +1,53 @@
+# Environment and secrets
 .env
-.agents
-.pytest_cache
+.env.*
+!.env.example
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pytype/
+
+# Coverage reports
 .coverage
-pytest.ini
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
 pyvenv.cfg
-lib64
-lib
-include
-bin
-__pycache__
-venv
+
+# Build and packaging artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# IDE and editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Local agent tooling
+.agents/
+.codex/
+
+# Logs and runtime files
+*.log
+*.pid
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
