@@ -1,5 +1,9 @@
 # D20 Telegram Bot
 
+[![Tests & Ruff](https://github.com/IamMushroom/d20_bot/actions/workflows/tests.yaml/badge.svg)](https://github.com/IamMushroom/d20_bot/actions/workflows/tests.yaml)
+[![Python 3.14](https://img.shields.io/badge/python-3.14-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
 Небольшой Telegram-бот для брсков кубов в настольных ролевых играх. Поддерживает математические выражения, броски Daggerheart и таймеры для чата.
 
 ## Команды
