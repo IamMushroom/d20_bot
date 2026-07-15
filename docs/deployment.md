@@ -149,6 +149,10 @@ GitHub variable `D20_MODE` управляет составом Compose:
 - `connected` добавляет Compose-профиль `platform` с Core;
 - dev-окружение дополнительно включает `debug` с `sqlite-web`.
 
+GitHub Environment Variable `D20_BOT_WEB_PORT` задаёт внешний порт Core отдельно для каждого
+окружения. Workflow использует безопасные разные значения по умолчанию: `8191` для `dev` и `8190`
+для `prd`, чтобы два Compose-проекта могли одновременно работать на одном Raspberry Pi.
+
 Core публикует `GET /health`. Compose проверяет endpoint и переводит контейнер в `healthy`, а
 deployment workflow ждёт готовности всех активных сервисов до одной минуты. При ошибке в job
 выводятся статусы и последние 100 строк логов.

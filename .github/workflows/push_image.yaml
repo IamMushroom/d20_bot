@@ -152,6 +152,7 @@ jobs:
       COMPOSE_PROFILES: ${{ vars.D20_MODE == 'connected' && 'platform' || '' }}
       D20_BOT_MODE: ${{ vars.D20_MODE }}
       D20_BOT_CORE_TOKEN: ${{ secrets.CORE_TOKEN }}
+      D20_BOT_WEB_PORT: ${{ vars.D20_BOT_WEB_PORT || '8190' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7

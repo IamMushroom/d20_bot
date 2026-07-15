@@ -34,6 +34,7 @@ jobs:
     timeout-minutes: 20
     env:
       COMPOSE_PROFILES: ${{ vars.D20_MODE == 'connected' && 'platform,debug' || 'debug' }}
+      D20_BOT_WEB_PORT: ${{ vars.D20_BOT_WEB_PORT || '8191' }}
     environment:
       name: ${{ github.ref_name }}
     steps:
