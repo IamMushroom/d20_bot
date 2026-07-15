@@ -87,7 +87,9 @@ class AdminWebServer:
                     HTTPStatus.UNAUTHORIZED, 'Ссылка недействительна или уже использована.'
                 )
             cookie = f'd20_admin={session_id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800'
-            if getenv('WEB_SECURE_COOKIE', 'true').lower() != 'false':
+            secure_mode = getenv('WEB_SECURE_COOKIE', 'auto').lower()
+            forwarded_protocol = headers.get('x-forwarded-proto', 'http').split(',', 1)[0].strip()
+            if secure_mode == 'true' or (secure_mode == 'auto' and forwarded_protocol == 'https'):
                 cookie += '; Secure'
             return HTTPStatus.SEE_OTHER, {'Location': '/', 'Set-Cookie': cookie}, b''
 

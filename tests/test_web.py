@@ -167,7 +167,7 @@ def test_web_url_command_sets_chat_address(tmp_path):
 
 
 def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
-    monkeypatch.setenv('WEB_SECURE_COOKIE', 'false')
+    monkeypatch.setenv('WEB_SECURE_COOKIE', 'auto')
     monkeypatch.setenv('GAME_TIMEZONE', 'UTC')
 
     async def scenario():
@@ -178,6 +178,13 @@ def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
 
         unauthorized = await server._route('GET', '/', {}, b'')
         login = await server._route('GET', f'/login?token={token}', {}, b'')
+        secure_token = access.create_login(identity)
+        secure_login = await server._route(
+            'GET',
+            f'/login?token={secure_token}',
+            {'x-forwarded-proto': 'https'},
+            b'',
+        )
         repeated = await server._route('GET', f'/login?token={token}', {}, b'')
         cookie = login[1]['Set-Cookie'].split(';', 1)[0]
         headers = {'cookie': cookie}
@@ -201,6 +208,7 @@ def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
         return (
             unauthorized,
             login,
+            secure_login,
             repeated,
             dashboard,
             bad_date,
@@ -216,15 +224,16 @@ def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
     assert results[0][0] is HTTPStatus.UNAUTHORIZED
     assert results[1][0] is HTTPStatus.SEE_OTHER
     assert 'Secure' not in results[1][1]['Set-Cookie']
-    assert results[2][0] is HTTPStatus.UNAUTHORIZED
-    assert results[3][0] is HTTPStatus.OK
-    assert results[4][0] is HTTPStatus.BAD_REQUEST
+    assert 'Secure' in results[2][1]['Set-Cookie']
+    assert results[3][0] is HTTPStatus.UNAUTHORIZED
+    assert results[4][0] is HTTPStatus.OK
     assert results[5][0] is HTTPStatus.BAD_REQUEST
-    assert results[6][0] is HTTPStatus.SEE_OTHER
-    assert b'Foundry' in results[7][2]
-    assert results[8][0] is HTTPStatus.NOT_FOUND
-    assert results[9] is not None
-    results[10].pin_chat_message.assert_awaited_once()
+    assert results[6][0] is HTTPStatus.BAD_REQUEST
+    assert results[7][0] is HTTPStatus.SEE_OTHER
+    assert b'Foundry' in results[8][2]
+    assert results[9][0] is HTTPStatus.NOT_FOUND
+    assert results[10] is not None
+    results[11].pin_chat_message.assert_awaited_once()
 
 
 def test_web_server_start_read_request_and_close(tmp_path):

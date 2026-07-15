@@ -85,7 +85,7 @@ d20
 | `SQLITE_WEB_PORT` | нет | `8080` | Локальный порт веб-интерфейса SQLite в debug-профиле. |
 | `WEB_BASE_URL` | нет | — | Общий URL панели; fallback, если для чата не выполнена `/web_url`. |
 | `WEB_PORT` | нет | `8190` | Порт встроенной панели. |
-| `WEB_SECURE_COOKIE` | нет | `true` | Secure-флаг cookie; отключать только для локального HTTP. |
+| `WEB_SECURE_COOKIE` | нет | `auto` | Secure-флаг cookie: автоопределение по HTTP/`X-Forwarded-Proto` или явное `true`/`false`. |
 
 ## Локальный запуск
 
@@ -163,7 +163,7 @@ docker compose stop sqlite-web
 ```dotenv
 WEB_BASE_URL=https://d20.example
 WEB_PORT=8190
-WEB_SECURE_COOKIE=true
+WEB_SECURE_COOKIE=auto
 ```
 
 Либо администратор чата может сохранить адрес в SQLite без перезапуска:
@@ -178,8 +178,8 @@ WEB_SECURE_COOKIE=true
 только в личный диалог. Ссылка одноразовая и действует 15 минут; после входа HttpOnly-сессия
 действует 8 часов. Все веб-сессии сбрасываются при перезапуске бота.
 
-Для теста в доверенной локальной сети без HTTPS нужно явно задать `WEB_SECURE_COOKIE=false`.
-Публично выставлять панель без HTTPS не следует.
+Режим `auto` не ставит Secure-флаг при прямом HTTP-доступе и ставит его, если reverse proxy
+передаёт `X-Forwarded-Proto: https`. Публично выставлять панель без HTTPS не следует.
 
 ## Тесты
 
