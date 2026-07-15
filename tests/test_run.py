@@ -18,7 +18,7 @@ def test_main_registers_all_handlers(monkeypatch):
     application_builder = Mock(return_value=builder)
     monkeypatch.setattr(run, 'ApplicationBuilder', application_builder)
     monkeypatch.setattr(
-        run, 'getenv', lambda name, default='': 'token' if name == 'TG_TOKEN' else default
+        run, 'getenv', lambda name, default='': 'token' if name == 'D20_BOT_TG_TOKEN' else default
     )
     monkeypatch.setattr(run, 'runtime_mode', lambda: 'standalone')
 
@@ -39,7 +39,7 @@ def test_main_registers_all_handlers(monkeypatch):
 def test_main_rejects_missing_token(monkeypatch):
     monkeypatch.setattr(run, 'getenv', lambda _name, default='': default)
 
-    with pytest.raises(RuntimeError, match='TG_TOKEN environment variable is not set'):
+    with pytest.raises(RuntimeError, match='D20_BOT_TG_TOKEN environment variable is not set'):
         run.main()
 
 
@@ -58,7 +58,9 @@ def test_bootstrap_configures_environment_and_starts_bot(monkeypatch):
 
     monkeypatch.setattr(run, 'load_dotenv', load_dotenv)
     monkeypatch.setattr(
-        run, 'getenv', lambda name, default=None: 'json' if name == 'LOG_FORMAT' else default
+        run,
+        'getenv',
+        lambda name, default=None: 'json' if name == 'D20_BOT_LOG_FORMAT' else default,
     )
     monkeypatch.setattr(run.log_format, 'configure_logging', configure_logging)
     monkeypatch.setattr(run.logging, 'getLogger', get_logger)
@@ -98,7 +100,10 @@ def test_connected_lifecycle_creates_core_client_without_database(monkeypatch):
     monkeypatch.setattr(
         run,
         'required_environment',
-        lambda name: {'CORE_URL': 'http://core:8190', 'CORE_TOKEN': 'secret'}[name],
+        lambda name: {
+            'D20_BOT_CORE_URL': 'http://core:8190',
+            'D20_BOT_CORE_TOKEN': 'secret',
+        }[name],
     )
     monkeypatch.setattr(run, 'CoreClient', Mock(return_value=client))
     monkeypatch.setattr(run, 'set_bot_commands', set_bot_commands)
@@ -113,12 +118,12 @@ def test_connected_lifecycle_creates_core_client_without_database(monkeypatch):
 
 
 def test_runtime_mode_defaults_to_standalone_and_validates(monkeypatch):
-    monkeypatch.delenv('D20_MODE', raising=False)
+    monkeypatch.delenv('D20_BOT_MODE', raising=False)
     assert run.runtime_mode() == 'standalone'
-    monkeypatch.setenv('D20_MODE', 'connected')
+    monkeypatch.setenv('D20_BOT_MODE', 'connected')
     assert run.runtime_mode() == 'connected'
-    monkeypatch.setenv('D20_MODE', 'invalid')
-    with pytest.raises(ValueError, match='D20_MODE'):
+    monkeypatch.setenv('D20_BOT_MODE', 'invalid')
+    with pytest.raises(ValueError, match='D20_BOT_MODE'):
         run.runtime_mode()
 
 

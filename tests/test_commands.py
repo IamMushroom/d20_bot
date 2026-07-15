@@ -96,7 +96,7 @@ def test_core_required_explains_connected_mode():
 
     sent = context.bot.send_message.await_args.kwargs
     assert sent['reply_to_message_id'] == 456
-    assert 'D20_MODE=connected' in sent['text']
+    assert 'D20_BOT_MODE=connected' in sent['text']
 
 
 def test_core_required_ignores_incomplete_update():

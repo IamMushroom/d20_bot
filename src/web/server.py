@@ -105,6 +105,8 @@ class AdminWebServer:
         self, method: str, target: str, headers: Mapping[str, str], body: bytes
     ) -> tuple[HTTPStatus, dict[str, str], bytes]:
         url = urlsplit(target)
+        if method == 'GET' and url.path == '/health':
+            return self._json(HTTPStatus.OK, {'status': 'ok'})
         if method == 'POST' and url.path == '/api/admin-link':
             return await self._admin_link(headers, parse_qs(body.decode()))
         if method == 'POST' and url.path == '/api/game':
@@ -127,7 +129,7 @@ class AdminWebServer:
                     HTTPStatus.UNAUTHORIZED, 'Ссылка недействительна или уже использована.'
                 )
             cookie = f'd20_admin={session_id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800'
-            secure_mode = getenv('WEB_SECURE_COOKIE', 'auto').lower()
+            secure_mode = getenv('D20_BOT_WEB_SECURE_COOKIE', 'auto').lower()
             forwarded_protocol = headers.get('x-forwarded-proto', 'http').split(',', 1)[0].strip()
             if secure_mode == 'true' or (secure_mode == 'auto' and forwarded_protocol == 'https'):
                 cookie += '; Secure'
@@ -188,7 +190,7 @@ class AdminWebServer:
                 foundry_url = form.get('foundry_url', [''])[0]
                 if not foundry_url:
                     foundry_url = await self._sessions.get_default_url(chat_id) or getenv(
-                        'FOUNDRY_URL', ''
+                        'D20_BOT_FOUNDRY_URL', ''
                     )
                 if scheduled_at.tzinfo is None or not valid_url(foundry_url):
                     raise ValueError
@@ -221,7 +223,9 @@ class AdminWebServer:
             chat_id = int(form['chat_id'][0])
             action = form.get('action', [''])[0]
             if action == 'get':
-                url = await self._sessions.get_default_url(chat_id) or getenv('FOUNDRY_URL', '')
+                url = await self._sessions.get_default_url(chat_id) or getenv(
+                    'D20_BOT_FOUNDRY_URL', ''
+                )
                 return self._json(HTTPStatus.OK, {'url': url if valid_url(url) else None})
             if action == 'set':
                 foundry_url = form['foundry_url'][0]
@@ -368,7 +372,7 @@ class AdminWebServer:
             else 'Игра не назначена.'
         )
         default_url = await self._sessions.get_default_url(identity.chat_id) or getenv(
-            'FOUNDRY_URL', ''
+            'D20_BOT_FOUNDRY_URL', ''
         )
         title = html.escape(identity.chat_title or str(identity.chat_id))
         if roster is None:

@@ -43,7 +43,7 @@ def test_json_formatter_produces_valid_structured_log():
 
 
 def test_configure_logging_rejects_unknown_format():
-    with pytest.raises(ValueError, match='Unsupported LOG_FORMAT'):
+    with pytest.raises(ValueError, match='Unsupported log format'):
         configure_logging('xml')
 
 

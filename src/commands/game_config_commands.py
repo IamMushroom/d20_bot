@@ -24,7 +24,7 @@ async def game_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 await core.get_game_url(chat.id)
                 if core is not None
                 else await session_service(context).get_default_url(chat.id)
-                or getenv('FOUNDRY_URL', '')
+                or getenv('D20_BOT_FOUNDRY_URL', '')
             )
         except CoreClientError:
             foundry_url = None

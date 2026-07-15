@@ -2,6 +2,11 @@ name: Tests & Ruff
 
 on:
   workflow_call:
+    inputs:
+      checkout_ref:
+        description: Git ref to check out; defaults to the triggering ref
+        required: false
+        type: string
   pull_request:
 
 permissions:
@@ -17,13 +22,24 @@ jobs:
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, raspberry]
+    timeout-minutes: 20
+    env:
+      TEST_IMAGE: d20-bot:test-${{ github.run_id }}-${{ github.run_attempt }}
+      RUNTIME_IMAGE: d20-bot:runtime-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
 
       - name: Run Ruff and pytest in Python 3.14
-        run: docker build --target test --tag d20-bot:test .
+        run: docker build --target test --tag "$TEST_IMAGE" .
 
       - name: Build runtime image
-        run: docker build --tag d20-bot:runtime-test .
+        run: docker build --tag "$RUNTIME_IMAGE" .
+
+      - name: Remove CI images
+        if: always()
+        shell: bash
+        run: docker image rm --force "$TEST_IMAGE" "$RUNTIME_IMAGE" 2>/dev/null || true
 

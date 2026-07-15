@@ -12,7 +12,7 @@ async def core_required(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         chat_id=chat.id,
         text=(
             'ℹ️ Эта команда доступна только при подключении к Core. '
-            'Запустите Core и установите D20_MODE=connected.'
+            'Запустите Core и установите D20_BOT_MODE=connected.'
         ),
         reply_to_message_id=message.id,
     )

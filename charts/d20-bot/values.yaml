@@ -1,0 +1,86 @@
+image:
+  repository: immushroom/d20_bot
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Prefer existingSecret outside of local experiments. It must contain D20_BOT_TG_TOKEN and,
+# when Core is enabled, D20_BOT_CORE_TOKEN.
+existingSecret: ""
+secrets:
+  telegramToken: ""
+  coreToken: ""
+
+bot:
+  replicaCount: 1
+  logFormat: json
+  gameTimezone: Europe/Moscow
+  podAnnotations: {}
+  podLabels: {}
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+
+core:
+  enabled: true
+  replicaCount: 1
+  logFormat: json
+  gameTimezone: Europe/Moscow
+  foundryUrl: ""
+  webBaseUrl: ""
+  secureCookie: auto
+  service:
+    type: ClusterIP
+    port: 8190
+  podAnnotations: {}
+  podLabels: {}
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 160Mi
+  persistence:
+    enabled: true
+    existingClaim: ""
+    storageClass: ""
+    accessModes:
+      - ReadWriteOnce
+    size: 1Gi
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: d20.example
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

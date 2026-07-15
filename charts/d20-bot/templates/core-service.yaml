@@ -1,0 +1,19 @@
+{{- if .Values.core.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "d20-bot.fullname" . }}-core
+  labels:
+    {{- include "d20-bot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: core
+spec:
+  type: {{ .Values.core.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.core.service.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "d20-bot.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: core
+{{- end }}

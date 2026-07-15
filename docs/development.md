@@ -52,7 +52,7 @@ Runner должен иметь:
 - лейблы `self-hosted` и `raspberry`;
 - Docker Engine, Buildx и Docker Compose v2;
 - доступ runner-пользователя к Docker daemon;
-- `TG_TOKEN` в GitHub Environment с именем ветки;
+- GitHub Secret `D20_BOT_TG_TOKEN` в Environment с именем ветки;
 - `DOCKER_HUB_TOKEN`, `DOCKER_HUB_NAME` и environment `prd` для публикации.
 
 ## Почему docs, а не GitHub Wiki

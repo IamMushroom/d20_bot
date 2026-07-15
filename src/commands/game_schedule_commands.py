@@ -50,11 +50,13 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     explicit_url = context.args[2] if len(context.args) == 3 else None
     default_url = await session_service(context).get_default_url(chat.id) if core is None else None
-    foundry_url = explicit_url or default_url or (getenv('FOUNDRY_URL', '') if core is None else '')
+    foundry_url = (
+        explicit_url or default_url or (getenv('D20_BOT_FOUNDRY_URL', '') if core is None else '')
+    )
     if explicit_url is not None and not valid_url(explicit_url):
         await context.bot.send_message(
             chat_id=chat.id,
-            text=f'⚠️ Укажи ссылку третьим аргументом или настрой корректный FOUNDRY_URL.\n{USAGE}',
+            text=f'⚠️ Укажи ссылку третьим аргументом или настрой корректный D20_BOT_FOUNDRY_URL.\n{USAGE}',
             reply_to_message_id=message.id,
         )
         return
@@ -86,7 +88,7 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not valid_url(foundry_url):
             await context.bot.send_message(
                 chat_id=chat.id,
-                text=f'⚠️ Укажи ссылку третьим аргументом или настрой корректный FOUNDRY_URL.\n{USAGE}',
+                text=f'⚠️ Укажи ссылку третьим аргументом или настрой корректный D20_BOT_FOUNDRY_URL.\n{USAGE}',
                 reply_to_message_id=message.id,
             )
             return

@@ -14,7 +14,7 @@
 
 ```shell
 cp .env.example .env
-# Укажите TG_TOKEN в .env
+# Укажите D20_BOT_TG_TOKEN в .env
 docker compose up --build -d
 ```
 
@@ -35,9 +35,9 @@ docker compose up --build -d
 Для запуска Core и панели мастера задайте в `.env`:
 
 ```dotenv
-D20_MODE=connected
-CORE_TOKEN=<long-random-secret>
-WEB_BASE_URL=http://rpi001.local:8190
+D20_BOT_MODE=connected
+D20_BOT_CORE_TOKEN=<long-random-secret>
+D20_BOT_WEB_BASE_URL=http://rpi001.local:8190
 ```
 
 ```shell
@@ -51,6 +51,7 @@ docker compose --profile platform up --build -d
 - [Архитектура Bot/Core](docs/architecture.md)
 - [База данных и репозитории](docs/database.md)
 - [Разработка, тесты и CI/CD](docs/development.md)
+- [Helm chart](charts/d20-bot/README.md)
 - [История изменений](CHANGELOG.md)
 
 ## Режимы

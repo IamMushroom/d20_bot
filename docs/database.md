@@ -39,16 +39,16 @@ Telegram command → service → repository → Database → SQLite
 
 ## Конфигурация
 
-Подключение задаётся переменной окружения `DATABASE_URL`:
+Подключение задаётся переменной окружения `D20_BOT_DATABASE_URL`:
 
 ```dotenv
-DATABASE_URL=sqlite:////data/d20.sqlite3
+D20_BOT_DATABASE_URL=sqlite:////data/d20.sqlite3
 ```
 
 Четыре косые черты обозначают абсолютный путь `/data/d20.sqlite3`. Для относительного локального пути используется:
 
 ```dotenv
-DATABASE_URL=sqlite:///data/d20.sqlite3
+D20_BOT_DATABASE_URL=sqlite:///data/d20.sqlite3
 ```
 
 Для тестов доступна база в памяти:
@@ -111,7 +111,7 @@ PRAGMA journal_mode = WAL;
 
 База подключается в `initialize_application()` до регистрации команд Telegram:
 
-1. Читается `DATABASE_URL`.
+1. Читается `D20_BOT_DATABASE_URL`.
 2. Создаётся подключение.
 3. Применяются миграции.
 4. Подключение сохраняется в `application.bot_data['database']`.

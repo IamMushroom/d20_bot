@@ -1,16 +1,16 @@
 services:
   d20:
-    image: immushroom/d20_bot:${DOCKER_TAG:-latest}
+    image: immushroom/d20_bot:${D20_BOT_DOCKER_TAG:-latest}
     build: .
     init: true
     read_only: true
     environment:
-      TG_TOKEN: ${TG_TOKEN:?Set TG_TOKEN in .env}
-      D20_MODE: ${D20_MODE:-standalone}
-      LOG_FORMAT: ${LOG_FORMAT:-json}
-      CORE_URL: ${CORE_URL:-http://core:8190}
-      CORE_TOKEN: ${CORE_TOKEN:-}
-      GAME_TIMEZONE: ${GAME_TIMEZONE:-Europe/Moscow}
+      D20_BOT_TG_TOKEN: ${D20_BOT_TG_TOKEN:?Set D20_BOT_TG_TOKEN in .env}
+      D20_BOT_MODE: ${D20_BOT_MODE:-standalone}
+      D20_BOT_LOG_FORMAT: ${D20_BOT_LOG_FORMAT:-json}
+      D20_BOT_CORE_URL: ${D20_BOT_CORE_URL:-http://core:8190}
+      D20_BOT_CORE_TOKEN: ${D20_BOT_CORE_TOKEN:-}
+      D20_BOT_GAME_TIMEZONE: ${D20_BOT_GAME_TIMEZONE:-Europe/Moscow}
     tmpfs:
       - /tmp:size=16m,mode=1777
     security_opt:
@@ -32,26 +32,26 @@ services:
           memory: 20M
 
   core:
-    image: immushroom/d20_bot:${DOCKER_TAG:-latest}
+    image: immushroom/d20_bot:${D20_BOT_DOCKER_TAG:-latest}
     build: .
     profiles: [platform]
     command: [.venv/bin/python, src/run_core.py]
     init: true
     read_only: true
     environment:
-      CORE_TOKEN: ${CORE_TOKEN:-}
-      LOG_FORMAT: ${LOG_FORMAT:-json}
-      DATABASE_URL: ${DATABASE_URL:-sqlite:////data/d20.sqlite3}
-      GAME_TIMEZONE: ${GAME_TIMEZONE:-Europe/Moscow}
-      FOUNDRY_URL: ${FOUNDRY_URL:-}
-      WEB_BASE_URL: ${WEB_BASE_URL:-}
-      WEB_HOST: 0.0.0.0
-      WEB_PORT: 8190
-      WEB_SECURE_COOKIE: ${WEB_SECURE_COOKIE:-auto}
+      D20_BOT_CORE_TOKEN: ${D20_BOT_CORE_TOKEN:-}
+      D20_BOT_LOG_FORMAT: ${D20_BOT_LOG_FORMAT:-json}
+      D20_BOT_DATABASE_URL: ${D20_BOT_DATABASE_URL:-sqlite:////data/d20.sqlite3}
+      D20_BOT_GAME_TIMEZONE: ${D20_BOT_GAME_TIMEZONE:-Europe/Moscow}
+      D20_BOT_FOUNDRY_URL: ${D20_BOT_FOUNDRY_URL:-}
+      D20_BOT_WEB_BASE_URL: ${D20_BOT_WEB_BASE_URL:-}
+      D20_BOT_WEB_HOST: 0.0.0.0
+      D20_BOT_WEB_PORT: 8190
+      D20_BOT_WEB_SECURE_COOKIE: ${D20_BOT_WEB_SECURE_COOKIE:-auto}
     volumes:
       - d20-data:/data
     ports:
-      - ${WEB_PORT:-8190}:8190
+      - ${D20_BOT_WEB_PORT:-8190}:8190
     tmpfs:
       - /tmp:size=16m,mode=1777
     security_opt:
@@ -60,6 +60,12 @@ services:
       - ALL
     restart: unless-stopped
     stop_grace_period: 30s
+    healthcheck:
+      test: [CMD, wget, --quiet, --spider, http://127.0.0.1:8190/health]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     logging:
       driver: json-file
       options:
@@ -85,7 +91,7 @@ services:
     tmpfs:
       - /tmp:size=16m,mode=1777
     ports:
-      - ${SQLITE_WEB_PORT:-8080}:8080
+      - ${D20_BOT_SQLITE_WEB_PORT:-8080}:8080
     security_opt:
       - no-new-privileges:true
     cap_drop:

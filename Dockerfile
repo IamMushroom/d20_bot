@@ -25,8 +25,8 @@ FROM base AS runtime
 
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev \
-    && addgroup -S bot \
-    && adduser -S bot -G bot \
+    && addgroup -S -g 10001 bot \
+    && adduser -S -D -H -u 10001 -G bot bot \
     && mkdir -p /data \
     && chown bot:bot /data
 

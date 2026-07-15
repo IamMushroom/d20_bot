@@ -22,12 +22,12 @@ async def run_core() -> None:
     runtime: CoreRuntime | None = None
     try:
         runtime = await CoreRuntime.start(
-            database_url=getenv('DATABASE_URL', 'sqlite:////data/d20.sqlite3'),
+            database_url=getenv('D20_BOT_DATABASE_URL', 'sqlite:////data/d20.sqlite3'),
             migrations_directory=MIGRATIONS_DIRECTORY,
-            web_host=getenv('WEB_HOST', '0.0.0.0'),
-            web_port=int(getenv('WEB_PORT', '8190')),
-            web_base_url=getenv('WEB_BASE_URL', '').strip(),
-            internal_token=required_environment('CORE_TOKEN'),
+            web_host=getenv('D20_BOT_WEB_HOST', '0.0.0.0'),
+            web_port=int(getenv('D20_BOT_WEB_PORT', '8190')),
+            web_base_url=getenv('D20_BOT_WEB_BASE_URL', '').strip(),
+            internal_token=required_environment('D20_BOT_CORE_TOKEN'),
         )
         await runtime.web_server.serve_forever()
     finally:
@@ -37,7 +37,7 @@ async def run_core() -> None:
 
 def bootstrap() -> None:
     load_dotenv()
-    log_format.configure_logging(getenv('LOG_FORMAT', 'json'))
+    log_format.configure_logging(getenv('D20_BOT_LOG_FORMAT', 'json'))
     logging.getLogger('httpx').setLevel(logging.WARNING)
     try:
         asyncio.run(run_core())

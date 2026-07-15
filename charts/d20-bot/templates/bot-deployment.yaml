@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "d20-bot.fullname" . }}-bot
+  labels:
+    {{- include "d20-bot.labels" . | nindent 4 }}
+    app.kubernetes.io/component: bot
+spec:
+  replicas: {{ .Values.bot.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "d20-bot.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: bot
+  template:
+    metadata:
+      annotations:
+        {{- toYaml .Values.bot.podAnnotations | nindent 8 }}
+      labels:
+        {{- include "d20-bot.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: bot
+        {{- with .Values.bot.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: bot
+          image: {{ include "d20-bot.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          env:
+            - name: D20_BOT_TG_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "d20-bot.secretName" . }}
+                  key: D20_BOT_TG_TOKEN
+            - name: D20_BOT_MODE
+              value: {{ ternary "connected" "standalone" .Values.core.enabled | quote }}
+            - name: D20_BOT_LOG_FORMAT
+              value: {{ .Values.bot.logFormat | quote }}
+            - name: D20_BOT_GAME_TIMEZONE
+              value: {{ .Values.bot.gameTimezone | quote }}
+            {{- if .Values.core.enabled }}
+            - name: D20_BOT_CORE_URL
+              value: {{ printf "http://%s-core:%v" (include "d20-bot.fullname" .) .Values.core.service.port | quote }}
+            - name: D20_BOT_CORE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "d20-bot.secretName" . }}
+                  key: D20_BOT_CORE_TOKEN
+            {{- end }}
+          resources:
+            {{- toYaml .Values.bot.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

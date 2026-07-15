@@ -8,7 +8,7 @@ from database.models import Session
 
 
 def game_timezone() -> tzinfo:
-    name = getenv('GAME_TIMEZONE', 'Europe/Moscow')
+    name = getenv('D20_BOT_GAME_TIMEZONE', 'Europe/Moscow')
     if name == 'UTC':
         return UTC
     try:
@@ -16,7 +16,9 @@ def game_timezone() -> tzinfo:
     except ZoneInfoNotFoundError:
         if name == 'Europe/Moscow':
             return timezone(timedelta(hours=3), name='Europe/Moscow')
-        logging.error('Unknown GAME_TIMEZONE, falling back to UTC', extra={'timezone': name})
+        logging.error(
+            'Unknown D20_BOT_GAME_TIMEZONE, falling back to UTC', extra={'timezone': name}
+        )
         return UTC
 
 
@@ -42,7 +44,7 @@ def game_message(session: Session) -> str:
     assert session.scheduled_at is not None
     assert session.foundry_url is not None
     local = session.scheduled_at.astimezone(game_timezone())
-    timezone_name = getenv('GAME_TIMEZONE', 'Europe/Moscow')
+    timezone_name = getenv('D20_BOT_GAME_TIMEZONE', 'Europe/Moscow')
     return (
         f'🎲 Следующая игра: {local:%d.%m.%Y в %H:%M} ({timezone_name})\n'
         f'🏰 Foundry: {session.foundry_url}'

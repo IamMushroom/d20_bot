@@ -1,0 +1,16 @@
+{{- if .Values.core.enabled }}
+Bot and Core are enabled.
+
+Core service: {{ include "d20-bot.fullname" . }}-core:{{ .Values.core.service.port }}
+{{- if .Values.ingress.enabled }}
+Web panel hosts:
+{{- range .Values.ingress.hosts }}
+  {{ .host }}
+{{- end }}
+{{- else }}
+The web panel is internal. Enable ingress or port-forward it:
+  kubectl port-forward svc/{{ include "d20-bot.fullname" . }}-core 8190:{{ .Values.core.service.port }}
+{{- end }}
+{{- else }}
+Standalone dice bot is enabled; Core and persistent storage are disabled.
+{{- end }}

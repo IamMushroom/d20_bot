@@ -14,9 +14,9 @@ CORE_CONNECTED_KEY = 'core_connected'
 
 
 def runtime_mode() -> str:
-    mode = getenv('D20_MODE', 'standalone').lower()
+    mode = getenv('D20_BOT_MODE', 'standalone').lower()
     if mode not in {'standalone', 'connected'}:
-        raise ValueError('D20_MODE must be standalone or connected')
+        raise ValueError('D20_BOT_MODE must be standalone or connected')
     return mode
 
 
@@ -32,7 +32,7 @@ async def initialize_application(application) -> None:
     application.bot_data[CORE_CONNECTED_KEY] = mode == 'connected'
     if mode == 'connected':
         application.bot_data[CORE_CLIENT_KEY] = CoreClient(
-            required_environment('CORE_URL'), required_environment('CORE_TOKEN')
+            required_environment('D20_BOT_CORE_URL'), required_environment('D20_BOT_CORE_TOKEN')
         )
         application.bot_data[EVENT_POLLER_KEY] = application.create_task(
             poll_events(application), name='core-event-poller'
@@ -49,8 +49,8 @@ async def shutdown_application(application) -> None:
 
 
 def main() -> None:
-    logging.info('Loading token from TG_TOKEN environment variable')
-    token = required_environment('TG_TOKEN')
+    logging.info('Loading token from D20_BOT_TG_TOKEN environment variable')
+    token = required_environment('D20_BOT_TG_TOKEN')
     logging.info('Token has been successfully loaded')
     app = (
         ApplicationBuilder()
@@ -80,7 +80,7 @@ def main() -> None:
 def bootstrap() -> None:
     """Load configuration, set up logging and start the bot."""
     load_dotenv()
-    format_name = getenv('LOG_FORMAT', 'json')
+    format_name = getenv('D20_BOT_LOG_FORMAT', 'json')
     log_format.configure_logging(format_name)
     logging.getLogger('httpx').setLevel(logging.WARNING)
     logging.getLogger('telegram.ext.Application').setLevel(logging.WARNING)

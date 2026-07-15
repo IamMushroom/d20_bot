@@ -34,11 +34,11 @@ Telegram
 
 ## Режимы Telegram-бота
 
-Режим задаётся переменной `D20_MODE`.
+Режим задаётся переменной `D20_BOT_MODE`.
 
 ### `standalone`
 
-Режим по умолчанию. Для запуска нужен только `TG_TOKEN`.
+Режим по умолчанию. Для запуска нужен только `D20_BOT_TG_TOKEN`.
 
 Доступны `/roll`, `/roll20`, `/duality`, `/timer`, `/help` и `/version`. Бот не открывает
 SQLite, не применяет миграции, не запускает HTTP-сервер и не зависит от Core.
@@ -48,17 +48,17 @@ SQLite, не применяет миграции, не запускает HTTP-�
 
 ### `connected`
 
-Бот сохраняет локальные команды standalone-режима и подключается к Core по `CORE_URL`.
+Бот сохраняет локальные команды standalone-режима и подключается к Core по `D20_BOT_CORE_URL`.
 В connected-режиме доступны все текущие управляющие команды. Они обращаются к Core за
 данными и выполнением сценариев, но Telegram-сообщения, member tags и закрепы создаёт бот.
 
 Для запуска требуются:
 
 ```dotenv
-TG_TOKEN=<telegram-token>
-D20_MODE=connected
-CORE_URL=http://core:8190
-CORE_TOKEN=<shared-secret>
+D20_BOT_TG_TOKEN=<telegram-token>
+D20_BOT_MODE=connected
+D20_BOT_CORE_URL=http://core:8190
+D20_BOT_CORE_TOKEN=<shared-secret>
 ```
 
 Если Core временно недоступен, броски продолжают работать, а удалённая команда возвращает
@@ -68,14 +68,14 @@ CORE_TOKEN=<shared-secret>
 
 При старте Core выполняет следующие действия:
 
-1. проверяет `CORE_TOKEN`;
-2. открывает SQLite по `DATABASE_URL`;
+1. проверяет `D20_BOT_CORE_TOKEN`;
+2. открывает SQLite по `D20_BOT_DATABASE_URL`;
 3. применяет миграции из `migrations/`;
 4. создаёт сервисы кампаний и сессий;
 5. запускает HTTP-сервер и панель мастера;
 6. при остановке закрывает HTTP-сервер, базу и Telegram-клиент.
 
-Core не получает `TG_TOKEN` и не вызывает Telegram API. Изменения из веб-панели записываются
+Core не получает `D20_BOT_TG_TOKEN` и не вызывает Telegram API. Изменения из веб-панели записываются
 в таблицу `outbox_events`. Connected-бот периодически получает неподтверждённые события через
 `POST /api/events`, выполняет Telegram-действие и подтверждает доставку. До подтверждения
 событие сохраняется в SQLite и переживает перезапуск обоих процессов. Доставка имеет
@@ -98,7 +98,7 @@ Core не получает `TG_TOKEN` и не вызывает Telegram API. И�
 
 ```http
 POST /api/admin-link
-Authorization: Bearer <CORE_TOKEN>
+Authorization: Bearer <D20_BOT_CORE_TOKEN>
 Content-Type: application/x-www-form-urlencoded
 
 chat_id=-100123&user_id=12345&chat_title=Campaign
@@ -111,7 +111,7 @@ Core проверяет, что пользователь является мас
 {"url": "https://d20.example/login?token=..."}
 ```
 
-`CORE_TOKEN` — внутренний общий секрет, а не пользовательская сессия. Используйте длинное
+`D20_BOT_CORE_TOKEN` — внутренний общий секрет, а не пользовательская сессия. Используйте длинное
 случайное значение, одинаковое для контейнеров `d20` и `core`. Не публикуйте внутренний API
 в интернет без reverse proxy и дополнительных сетевых ограничений.
 
@@ -126,10 +126,10 @@ docker compose up --build -d
 Полная платформа запускается профилем `platform`:
 
 ```dotenv
-TG_TOKEN=<telegram-token>
-D20_MODE=connected
-CORE_TOKEN=<long-random-secret>
-WEB_BASE_URL=http://rpi001.local:8190
+D20_BOT_TG_TOKEN=<telegram-token>
+D20_BOT_MODE=connected
+D20_BOT_CORE_TOKEN=<long-random-secret>
+D20_BOT_WEB_BASE_URL=http://rpi001.local:8190
 ```
 
 ```shell
@@ -192,7 +192,7 @@ docker compose logs -f core
 Если `/admin` сообщает о недоступности Core, следует проверить:
 
 - запущен ли профиль `platform`;
-- совпадает ли `CORE_TOKEN` у обоих сервисов;
-- использует ли бот `D20_MODE=connected`;
-- доступен ли из контейнера бота адрес `CORE_URL`;
-- задан ли публичный `WEB_BASE_URL` или адрес панели для кампании.
+- совпадает ли `D20_BOT_CORE_TOKEN` у обоих сервисов;
+- использует ли бот `D20_BOT_MODE=connected`;
+- доступен ли из контейнера бота адрес `D20_BOT_CORE_URL`;
+- задан ли публичный `D20_BOT_WEB_BASE_URL` или адрес панели для кампании.

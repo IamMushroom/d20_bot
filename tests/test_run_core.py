@@ -12,11 +12,11 @@ def test_run_core_starts_and_stops_runtime(monkeypatch, tmp_path):
         runtime.web_server.serve_forever = AsyncMock()
         runtime.close = AsyncMock()
         values = {
-            'CORE_TOKEN': 'core-token',
-            'DATABASE_URL': 'sqlite:///:memory:',
-            'WEB_HOST': '127.0.0.1',
-            'WEB_PORT': '9000',
-            'WEB_BASE_URL': 'https://d20.example',
+            'D20_BOT_CORE_TOKEN': 'core-token',
+            'D20_BOT_DATABASE_URL': 'sqlite:///:memory:',
+            'D20_BOT_WEB_HOST': '127.0.0.1',
+            'D20_BOT_WEB_PORT': '9000',
+            'D20_BOT_WEB_BASE_URL': 'https://d20.example',
         }
         monkeypatch.setattr(run_core, 'getenv', lambda name, default='': values.get(name, default))
         start = AsyncMock(return_value=runtime)
@@ -34,7 +34,7 @@ def test_run_core_starts_and_stops_runtime(monkeypatch, tmp_path):
 
 def test_run_core_requires_environment(monkeypatch):
     monkeypatch.setattr(run_core, 'getenv', lambda _name, default='': default)
-    with pytest.raises(RuntimeError, match='CORE_TOKEN'):
+    with pytest.raises(RuntimeError, match='D20_BOT_CORE_TOKEN'):
         asyncio.run(run_core.run_core())
 
 

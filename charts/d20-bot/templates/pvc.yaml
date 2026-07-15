@@ -1,0 +1,17 @@
+{{- if and .Values.core.enabled .Values.core.persistence.enabled (not .Values.core.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "d20-bot.fullname" . }}-data
+  labels:
+    {{- include "d20-bot.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.core.persistence.accessModes | nindent 4 }}
+  {{- with .Values.core.persistence.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.core.persistence.size }}
+{{- end }}

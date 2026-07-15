@@ -272,8 +272,8 @@ def test_web_url_command_sets_chat_address(tmp_path):
 
 
 def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
-    monkeypatch.setenv('WEB_SECURE_COOKIE', 'auto')
-    monkeypatch.setenv('GAME_TIMEZONE', 'UTC')
+    monkeypatch.setenv('D20_BOT_WEB_SECURE_COOKIE', 'auto')
+    monkeypatch.setenv('D20_BOT_GAME_TIMEZONE', 'UTC')
 
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
@@ -282,6 +282,7 @@ def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
         identity = AdminIdentity(-100, 7, 'Campaign')
         token = access.create_login(identity)
 
+        health = await server._route('GET', '/health', {}, b'')
         unauthorized = await server._route('GET', '/', {}, b'')
         login = await server._route('GET', f'/login?token={token}', {}, b'')
         secure_token = access.create_login(identity)
@@ -312,6 +313,7 @@ def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
         planned = await sessions.get_planned(-100)
         await database.close()
         return (
+            health,
             unauthorized,
             login,
             secure_login,
@@ -327,20 +329,25 @@ def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
         )
 
     results = asyncio.run(scenario())
-    assert results[0][0] is HTTPStatus.UNAUTHORIZED
-    assert results[1][0] is HTTPStatus.SEE_OTHER
-    assert 'Secure' not in results[1][1]['Set-Cookie']
-    assert 'Secure' in results[2][1]['Set-Cookie']
-    assert results[3][0] is HTTPStatus.UNAUTHORIZED
-    assert results[4][0] is HTTPStatus.OK
-    assert b'&lt;Tilly&gt;' in results[4][2]
-    assert results[5][0] is HTTPStatus.BAD_REQUEST
+    assert results[0] == (
+        HTTPStatus.OK,
+        {'Content-Type': 'application/json; charset=utf-8'},
+        b'{"status": "ok"}',
+    )
+    assert results[1][0] is HTTPStatus.UNAUTHORIZED
+    assert results[2][0] is HTTPStatus.SEE_OTHER
+    assert 'Secure' not in results[2][1]['Set-Cookie']
+    assert 'Secure' in results[3][1]['Set-Cookie']
+    assert results[4][0] is HTTPStatus.UNAUTHORIZED
+    assert results[5][0] is HTTPStatus.OK
+    assert b'&lt;Tilly&gt;' in results[5][2]
     assert results[6][0] is HTTPStatus.BAD_REQUEST
-    assert results[7][0] is HTTPStatus.SEE_OTHER
-    assert b'Foundry' in results[8][2]
-    assert results[9][0] is HTTPStatus.NOT_FOUND
-    assert results[10] is not None
-    results[11].publish.assert_awaited_once()
+    assert results[7][0] is HTTPStatus.BAD_REQUEST
+    assert results[8][0] is HTTPStatus.SEE_OTHER
+    assert b'Foundry' in results[9][2]
+    assert results[10][0] is HTTPStatus.NOT_FOUND
+    assert results[11] is not None
+    results[12].publish.assert_awaited_once()
 
 
 def test_internal_api_issues_admin_link_for_master(tmp_path):
@@ -381,8 +388,8 @@ def test_internal_api_issues_admin_link_for_master(tmp_path):
 
 
 def test_internal_game_api(tmp_path, monkeypatch):
-    monkeypatch.setenv('GAME_TIMEZONE', 'UTC')
-    monkeypatch.setenv('FOUNDRY_URL', 'https://foundry.example/default')
+    monkeypatch.setenv('D20_BOT_GAME_TIMEZONE', 'UTC')
+    monkeypatch.setenv('D20_BOT_FOUNDRY_URL', 'https://foundry.example/default')
 
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)

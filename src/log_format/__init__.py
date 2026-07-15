@@ -52,7 +52,7 @@ class JsonFormatter(logging.Formatter):
 
 def configure_logging(format_name: str = 'json') -> None:
     if format_name != 'json':
-        raise ValueError(f'Unsupported LOG_FORMAT: {format_name}')
+        raise ValueError(f'Unsupported log format: {format_name}')
 
     handler = logging.StreamHandler()
     handler.setFormatter(JsonFormatter())

@@ -25,7 +25,7 @@ def bot_data(database):
 
 
 def test_parse_date_supports_full_and_short_dates(monkeypatch):
-    monkeypatch.setenv('GAME_TIMEZONE', 'UTC')
+    monkeypatch.setenv('D20_BOT_GAME_TIMEZONE', 'UTC')
     now = datetime(2026, 7, 15, 12, tzinfo=UTC)
     assert parse_game_date('20.07.2026', '19:00', now) == datetime(2026, 7, 20, 19, tzinfo=UTC)
     assert parse_game_date('10.07', '19:00', now) == datetime(2027, 7, 10, 19, tzinfo=UTC)
@@ -35,8 +35,8 @@ def test_parse_date_supports_full_and_short_dates(monkeypatch):
 
 
 def test_game_schedule_lifecycle(tmp_path, monkeypatch):
-    monkeypatch.setenv('GAME_TIMEZONE', 'UTC')
-    monkeypatch.setenv('FOUNDRY_URL', 'https://foundry.example/default')
+    monkeypatch.setenv('D20_BOT_GAME_TIMEZONE', 'UTC')
+    monkeypatch.setenv('D20_BOT_FOUNDRY_URL', 'https://foundry.example/default')
 
     async def scenario():
         database = await SQLiteDatabase.connect(str(tmp_path / 'game.sqlite3'))
@@ -101,7 +101,7 @@ def test_game_rejects_non_admin_and_invalid_input(tmp_path):
 
 
 def test_game_requires_default_or_explicit_foundry_url(tmp_path, monkeypatch):
-    monkeypatch.delenv('FOUNDRY_URL', raising=False)
+    monkeypatch.delenv('D20_BOT_FOUNDRY_URL', raising=False)
 
     async def scenario():
         database = await SQLiteDatabase.connect(str(tmp_path / 'missing-url.sqlite3'))
@@ -127,7 +127,7 @@ def test_game_requires_default_or_explicit_foundry_url(tmp_path, monkeypatch):
         return bot
 
     bot = asyncio.run(scenario())
-    assert 'FOUNDRY_URL' in bot.send_message.await_args.kwargs['text']
+    assert 'D20_BOT_FOUNDRY_URL' in bot.send_message.await_args.kwargs['text']
     bot.pin_chat_message.assert_not_awaited()
 
 
@@ -160,8 +160,8 @@ def test_game_reports_pin_failure_in_private_chat(tmp_path):
 
 
 def test_game_url_sets_and_supplies_chat_default(tmp_path, monkeypatch):
-    monkeypatch.setenv('GAME_TIMEZONE', 'UTC')
-    monkeypatch.setenv('FOUNDRY_URL', 'https://foundry.example/environment')
+    monkeypatch.setenv('D20_BOT_GAME_TIMEZONE', 'UTC')
+    monkeypatch.setenv('D20_BOT_FOUNDRY_URL', 'https://foundry.example/environment')
 
     async def scenario():
         database = await SQLiteDatabase.connect(str(tmp_path / 'game-url.sqlite3'))
@@ -198,8 +198,8 @@ def test_game_url_sets_and_supplies_chat_default(tmp_path, monkeypatch):
 
 
 def test_game_command_reschedules_existing_session_and_replaces_pin(tmp_path, monkeypatch):
-    monkeypatch.setenv('GAME_TIMEZONE', 'UTC')
-    monkeypatch.setenv('FOUNDRY_URL', 'https://foundry.example')
+    monkeypatch.setenv('D20_BOT_GAME_TIMEZONE', 'UTC')
+    monkeypatch.setenv('D20_BOT_FOUNDRY_URL', 'https://foundry.example')
 
     async def scenario():
         database = await SQLiteDatabase.connect(str(tmp_path / 'reschedule.sqlite3'))
@@ -274,7 +274,7 @@ def test_game_url_rejects_non_admin_and_invalid_url(tmp_path):
 
 
 def test_connected_game_and_url_commands(monkeypatch):
-    monkeypatch.setenv('GAME_TIMEZONE', 'UTC')
+    monkeypatch.setenv('D20_BOT_GAME_TIMEZONE', 'UTC')
 
     async def scenario():
         core = SimpleNamespace(

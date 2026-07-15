@@ -4,15 +4,24 @@ on:
   push:
     branches:
       - dev
-    paths-ignore:
-      - '**/README.md'
-      - '.github/workflows/push_image.yaml'
+    paths:
+      - '.github/workflows/run_bot.yaml'
+      - '.github/workflows/tests.yaml'
+      - 'src/**'
+      - 'migrations/**'
+      - 'Dockerfile'
+      - 'Dockerfile.sqlite-web'
+      - 'docker-compose.yaml'
+      - 'pyproject.toml'
+      - 'pytest.ini'
+      - 'uv.lock'
 
 permissions:
   contents: read
 
 concurrency:
   group: deploy-${{ github.ref }}
+  # Never interrupt docker compose halfway through replacing containers.
   cancel-in-progress: false
 
 jobs:
@@ -22,8 +31,9 @@ jobs:
   deploy:
     needs: tests
     runs-on: [self-hosted, raspberry]
+    timeout-minutes: 20
     env:
-      COMPOSE_PROFILES: debug
+      COMPOSE_PROFILES: ${{ vars.D20_MODE == 'connected' && 'platform,debug' || 'debug' }}
     environment:
       name: ${{ github.ref_name }}
     steps:
@@ -40,36 +50,51 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Build image
-        run: docker build --tag "immushroom/d20_bot:${{ steps.variables.outputs.tag }}" .
+        run: >-
+          docker build
+          --label io.d20-bot.ci-environment=dev
+          --tag "immushroom/d20_bot:${{ steps.variables.outputs.tag }}"
+          .
 
       - name: Deploy
         env:
-          DOCKER_TAG: ${{ steps.variables.outputs.tag }}
-          TG_TOKEN: ${{ secrets.TG_TOKEN }}
-        run: >-
-          docker compose
-          -p "${{ steps.variables.outputs.project }}"
-          up -d --remove-orphans
+          D20_BOT_DOCKER_TAG: ${{ steps.variables.outputs.tag }}
+          D20_BOT_TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          D20_BOT_MODE: ${{ vars.D20_MODE }}
+        shell: bash
+        run: |
+          docker compose -p "${{ steps.variables.outputs.project }}" config --quiet
+          docker compose -p "${{ steps.variables.outputs.project }}" up -d --remove-orphans
 
       - name: Verify deployment
         env:
           COMPOSE_PROJECT: ${{ steps.variables.outputs.project }}
-          DOCKER_TAG: ${{ steps.variables.outputs.tag }}
-          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          D20_BOT_DOCKER_TAG: ${{ steps.variables.outputs.tag }}
+          D20_BOT_TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          D20_BOT_MODE: ${{ vars.D20_MODE }}
         shell: bash
         run: |
-          CONTAINER_ID=$(docker compose -p "$COMPOSE_PROJECT" ps -q d20)
-          if [[ -z "$CONTAINER_ID" ]]; then
-            docker compose -p "$COMPOSE_PROJECT" logs --no-color d20
-            exit 1
-          fi
-          sleep 10
-          if [[ "$(docker inspect --format '{{.State.Running}}' "$CONTAINER_ID")" == "true" ]]; then
-            exit 0
-          fi
-          docker inspect --format '{{json .State}}' "$CONTAINER_ID"
-          docker compose -p "$COMPOSE_PROJECT" logs --no-color d20
+          for ATTEMPT in {1..12}; do
+            FAILED=0
+            while IFS= read -r SERVICE; do
+              CONTAINER_ID=$(docker compose -p "$COMPOSE_PROJECT" ps -q "$SERVICE")
+              RUNNING=$(docker inspect --format '{{.State.Running}}' "$CONTAINER_ID" 2>/dev/null || true)
+              RESTARTING=$(docker inspect --format '{{.State.Restarting}}' "$CONTAINER_ID" 2>/dev/null || true)
+              HEALTH=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$CONTAINER_ID" 2>/dev/null || true)
+              if [[ "$RUNNING" != "true" ]] || [[ "$RESTARTING" == "true" ]] || \
+                [[ "$HEALTH" == "unhealthy" ]] || [[ "$HEALTH" == "starting" ]]; then
+                FAILED=1
+              fi
+            done < <(docker compose -p "$COMPOSE_PROJECT" config --services)
+            [[ "$FAILED" -eq 0 ]] && exit 0
+            sleep 5
+          done
+          docker compose -p "$COMPOSE_PROJECT" ps
+          docker compose -p "$COMPOSE_PROJECT" logs --no-color --tail 100
           exit 1
 
-      - name: Prune unused images
-        run: docker image prune --force
+      - name: Remove old dev images
+        run: >-
+          docker image prune --all --force
+          --filter label=io.d20-bot.ci-environment=dev
+          --filter until=168h

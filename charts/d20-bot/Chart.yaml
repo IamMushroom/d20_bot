@@ -1,0 +1,11 @@
+apiVersion: v2
+name: d20-bot
+description: Telegram dice bot with an optional Core, SQLite storage and web panel
+type: application
+version: 0.1.0
+appVersion: "0.11.2"
+home: https://github.com/IamMushroom/d20_bot
+sources:
+  - https://github.com/IamMushroom/d20_bot
+maintainers:
+  - name: IamMushroom

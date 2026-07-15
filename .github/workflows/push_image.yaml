@@ -1,18 +1,34 @@
 name: Push image
-on: 
+
+on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag, for example 0.11.2
+        required: true
+        type: string
   push:
-    tags: 
+    tags:
       - "*.*.*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref }}
+  cancel-in-progress: false
 
 jobs:
   tests:
     uses: ./.github/workflows/tests.yaml
+    with:
+      checkout_ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
 
   build-and-push:
     needs: tests
     outputs:
-      release-tag: ${{ steps.version.outputs.version }}
+      release_tag: ${{ steps.version.outputs.version }}
+      git_tag: ${{ steps.version.outputs.git_tag }}
     runs-on: [self-hosted, raspberry]
     environment: prd
     permissions:
@@ -22,18 +38,27 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
 
       - name: Verify release version
         id: version
         shell: bash
+        env:
+          REQUESTED_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
         run: |
           PROJECT_VERSION=$(awk -F'"' '/^version = "/ { print $2; exit }' pyproject.toml)
-          TAG_VERSION=${GITHUB_REF_NAME#v}
+          TAG_VERSION=${REQUESTED_TAG#v}
+          if [[ ! "$TAG_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Unsupported release tag: $REQUESTED_TAG"
+            exit 1
+          fi
           if [[ "$PROJECT_VERSION" != "$TAG_VERSION" ]]; then
-            echo "Release tag $GITHUB_REF_NAME does not match project version $PROJECT_VERSION"
+            echo "Release tag $REQUESTED_TAG does not match project version $PROJECT_VERSION"
             exit 1
           fi
           echo "version=$TAG_VERSION" >> "$GITHUB_OUTPUT"
+          echo "git_tag=$REQUESTED_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -50,10 +75,9 @@ jobs:
             ghcr.io/IamMushroom/d20_bot
           # generate Docker tags based on the following events/attributes
           tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=semver,pattern={{version}},value=${{ steps.version.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.version.outputs.version }}
+            type=semver,pattern={{major}},value=${{ steps.version.outputs.version }}
             type=sha
       - name: Login to Docker Hub
         uses: docker/login-action@v4
@@ -102,32 +126,48 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
+          TAG_NAME='${{ needs.build-and-push.outputs.git_tag }}'
+          if curl --silent --fail \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${TAG_NAME}" \
+            >/dev/null; then
+            echo "GitHub Release for $TAG_NAME already exists"
+            exit 0
+          fi
           curl --fail-with-body \
             --request POST \
             --header "Accept: application/vnd.github+json" \
             --header "Authorization: Bearer $GH_TOKEN" \
             --header "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases" \
-            --data "{\"tag_name\":\"${GITHUB_REF_NAME}\",\"name\":\"D20 Bot ${GITHUB_REF_NAME}\",\"generate_release_notes\":true}"
+            --data "{\"tag_name\":\"${TAG_NAME}\",\"name\":\"D20 Bot ${TAG_NAME}\",\"generate_release_notes\":true}"
 
   deploy-production:
     needs: [build-and-push, release]
     runs-on: [self-hosted, raspberry]
+    timeout-minutes: 20
     environment: prd
+    env:
+      COMPOSE_PROFILES: ${{ vars.D20_MODE == 'connected' && 'platform' || '' }}
+      D20_BOT_MODE: ${{ vars.D20_MODE }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
 
       - name: Pull release image
         env:
-          DOCKER_TAG: ${{ needs.build-and-push.outputs.release-tag }}
-          TG_TOKEN: ${{ secrets.TG_TOKEN }}
-        run: docker compose -p d20_bot_prd pull d20
+          D20_BOT_DOCKER_TAG: ${{ needs.build-and-push.outputs.release_tag }}
+          D20_BOT_TG_TOKEN: ${{ secrets.TG_TOKEN }}
+        shell: bash
+        run: |
+          docker compose -p d20_bot_prd config --quiet
+          docker compose -p d20_bot_prd pull d20
 
       - name: Deploy release image
         env:
-          DOCKER_TAG: ${{ needs.build-and-push.outputs.release-tag }}
-          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          D20_BOT_DOCKER_TAG: ${{ needs.build-and-push.outputs.release_tag }}
+          D20_BOT_TG_TOKEN: ${{ secrets.TG_TOKEN }}
         run: >-
           docker compose
           -p d20_bot_prd
@@ -135,22 +175,25 @@ jobs:
 
       - name: Verify deployment
         env:
-          DOCKER_TAG: ${{ needs.build-and-push.outputs.release-tag }}
-          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          D20_BOT_DOCKER_TAG: ${{ needs.build-and-push.outputs.release_tag }}
+          D20_BOT_TG_TOKEN: ${{ secrets.TG_TOKEN }}
         shell: bash
         run: |
-          CONTAINER_ID=$(docker compose -p d20_bot_prd ps -q d20)
-          if [[ -z "$CONTAINER_ID" ]]; then
-            docker compose -p d20_bot_prd logs --no-color d20
-            exit 1
-          fi
-          sleep 10
-          if [[ "$(docker inspect --format '{{.State.Running}}' "$CONTAINER_ID")" == "true" ]]; then
-            exit 0
-          fi
-          docker inspect --format '{{json .State}}' "$CONTAINER_ID"
-          docker compose -p d20_bot_prd logs --no-color d20
+          for ATTEMPT in {1..12}; do
+            FAILED=0
+            while IFS= read -r SERVICE; do
+              CONTAINER_ID=$(docker compose -p d20_bot_prd ps -q "$SERVICE")
+              RUNNING=$(docker inspect --format '{{.State.Running}}' "$CONTAINER_ID" 2>/dev/null || true)
+              RESTARTING=$(docker inspect --format '{{.State.Restarting}}' "$CONTAINER_ID" 2>/dev/null || true)
+              HEALTH=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$CONTAINER_ID" 2>/dev/null || true)
+              if [[ "$RUNNING" != "true" ]] || [[ "$RESTARTING" == "true" ]] || \
+                [[ "$HEALTH" == "unhealthy" ]] || [[ "$HEALTH" == "starting" ]]; then
+                FAILED=1
+              fi
+            done < <(docker compose -p d20_bot_prd config --services)
+            [[ "$FAILED" -eq 0 ]] && exit 0
+            sleep 5
+          done
+          docker compose -p d20_bot_prd ps
+          docker compose -p d20_bot_prd logs --no-color --tail 100
           exit 1
-
-      - name: Prune unused images
-        run: docker image prune --force
