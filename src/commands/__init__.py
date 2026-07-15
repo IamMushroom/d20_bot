@@ -7,10 +7,12 @@ from commands.error_commands import handle_error
 from commands.game_config_commands import game_url
 from commands.game_schedule_commands import game
 from commands.help_commands import help_command
+from commands.mode_commands import core_required
 from commands.observability import observed_callback
 from commands.registry import (
     BASIC_HELP_MESSAGE,
     COMMANDS,
+    CORE_COMMANDS,
     HELP_MESSAGE,
     MENU_COMMANDS,
     commands_for,
@@ -33,6 +35,7 @@ __all__ = (
     'player',
     'HELP_MESSAGE',
     'COMMANDS',
+    'CORE_COMMANDS',
     'BASIC_HELP_MESSAGE',
     'MENU_COMMANDS',
     'observed_callback',
@@ -46,5 +49,6 @@ __all__ = (
     'version_command',
     'web_url',
     'commands_for',
+    'core_required',
     'help_message',
 )

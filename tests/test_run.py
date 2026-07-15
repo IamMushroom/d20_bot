@@ -30,9 +30,7 @@ def test_main_registers_all_handlers(monkeypatch):
         run.initialize_application
     )
     post_init_builder.post_shutdown.assert_called_once_with(run.shutdown_application)
-    expected_handlers = sum(
-        1 + len(command.aliases) for command in commands.commands_for(core_connected=False)
-    )
+    expected_handlers = sum(1 + len(command.aliases) for command in commands.COMMANDS)
     assert application.add_handler.call_count == expected_handlers
     application.add_error_handler.assert_called_once_with(commands.handle_error)
     application.run_polling.assert_called_once_with()

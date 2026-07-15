@@ -55,6 +55,9 @@ def test_standalone_registry_excludes_platform_commands():
     }
     assert '/admin' not in commands.BASIC_HELP_MESSAGE
     assert '/admin' in commands.HELP_MESSAGE
+    assert {command.name for command in commands.CORE_COMMANDS} == {
+        command.name for command in commands.COMMANDS if command.requires_core
+    }
 
 
 def test_connected_registry_only_adds_remote_commands():

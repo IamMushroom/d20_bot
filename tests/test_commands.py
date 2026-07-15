@@ -88,6 +88,29 @@ def test_help_sends_command_reference():
     assert context.bot.send_message.await_args.kwargs['text'] == commands.BASIC_HELP_MESSAGE
 
 
+def test_core_required_explains_connected_mode():
+    update = make_update(text='/game')
+    context = make_context()
+
+    asyncio.run(commands.core_required(update, context))
+
+    sent = context.bot.send_message.await_args.kwargs
+    assert sent['reply_to_message_id'] == 456
+    assert 'D20_MODE=connected' in sent['text']
+
+
+def test_core_required_ignores_incomplete_update():
+    context = make_context()
+
+    asyncio.run(
+        commands.core_required(
+            SimpleNamespace(effective_chat=None, effective_message=None), context
+        )
+    )
+
+    context.bot.send_message.assert_not_awaited()
+
+
 def test_timer_creates_independent_background_tasks():
     context = make_context(('10',))
     first_update = make_update(message_id=1, text='/timer 10')

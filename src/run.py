@@ -61,12 +61,16 @@ def main() -> None:
         .build()
     )
     mode = runtime_mode()
-    for command in commands.commands_for(core_connected=mode == 'connected'):
+    core_connected = mode == 'connected'
+    for command in commands.COMMANDS:
+        callback = (
+            command.callback
+            if core_connected or not command.requires_core
+            else commands.core_required
+        )
         for name in (command.name, *command.aliases):
             app.add_handler(
-                CommandHandler(
-                    name, commands.observed_callback(name, command.callback), filters.TEXT
-                )
+                CommandHandler(name, commands.observed_callback(name, callback), filters.TEXT)
             )
     app.add_error_handler(commands.handle_error)
     logging.info('Starting application')

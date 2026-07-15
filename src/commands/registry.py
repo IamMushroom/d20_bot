@@ -145,6 +145,7 @@ COMMANDS = (
 )
 
 MENU_COMMANDS = tuple(command for command in COMMANDS if command.show_in_menu)
+CORE_COMMANDS = tuple(command for command in COMMANDS if command.requires_core)
 
 
 def commands_for(*, core_connected: bool) -> tuple[CommandSpec, ...]:
