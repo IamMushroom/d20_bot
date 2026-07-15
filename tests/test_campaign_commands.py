@@ -9,6 +9,7 @@ from telegram.error import BadRequest
 import commands
 import commands.member_tags as member_tags
 from commands.helpers import CAMPAIGN_SERVICE_KEY, DATABASE_KEY, SESSION_SERVICE_KEY
+from core import CoreClientError, PlayerRegistration, SessionTransition
 from database import SQLiteDatabase, apply_migrations
 from database.repositories import CampaignRepository, SessionRepository
 from services import CampaignService, SessionService
@@ -293,3 +294,133 @@ def test_private_chat_saves_master_without_attempting_tag(tmp_path):
     assert campaign is not None and campaign.master_user_id == 7
     assert bot.send_message.await_args.kwargs['text'] == '🎭 Мастер кампании назначен: User 7'
     bot.set_chat_member_tag.assert_not_awaited()
+
+
+def test_connected_session_lifecycle():
+    async def scenario():
+        core = SimpleNamespace(
+            start_session=AsyncMock(return_value=SessionTransition('started', 3, 'Tower', 99)),
+            stop_session=AsyncMock(return_value=SessionTransition('stopped', 3)),
+        )
+        bot = SimpleNamespace(send_message=AsyncMock(), unpin_chat_message=AsyncMock())
+        context = SimpleNamespace(
+            args=['Tower'], bot=bot, application=SimpleNamespace(bot_data={'core_client': core})
+        )
+        update, _ = make_update(7)
+        await commands.session_start(update, context)
+        context.args = []
+        await commands.session_stop(update, context)
+        return core, bot
+
+    core, bot = asyncio.run(scenario())
+    core.start_session.assert_awaited_once_with(-100, 7, 'Tower')
+    core.stop_session.assert_awaited_once_with(-100, 7)
+    bot.unpin_chat_message.assert_awaited_once_with(chat_id=-100, message_id=99)
+    assert 'завершена' in bot.send_message.await_args.kwargs['text']
+
+
+def test_connected_session_statuses_and_errors():
+    async def scenario():
+        core = SimpleNamespace(
+            start_session=AsyncMock(
+                side_effect=[
+                    SessionTransition('forbidden'),
+                    SessionTransition('already_active'),
+                    CoreClientError('offline'),
+                ]
+            ),
+            stop_session=AsyncMock(
+                side_effect=[
+                    SessionTransition('forbidden'),
+                    SessionTransition('no_active_session'),
+                    CoreClientError('offline'),
+                ]
+            ),
+        )
+        bot = SimpleNamespace(send_message=AsyncMock())
+        context = SimpleNamespace(
+            args=[], bot=bot, application=SimpleNamespace(bot_data={'core_client': core})
+        )
+        update, _ = make_update(7)
+        messages = []
+        for command in (
+            commands.session_start,
+            commands.session_start,
+            commands.session_start,
+            commands.session_stop,
+            commands.session_stop,
+            commands.session_stop,
+        ):
+            await command(update, context)
+            messages.append(bot.send_message.await_args.kwargs['text'])
+        return messages
+
+    messages = asyncio.run(scenario())
+    assert 'назначенный мастер' in messages[0]
+    assert 'уже идёт' in messages[1]
+    assert 'Core недоступен' in messages[2]
+    assert 'назначенный мастер' in messages[3]
+    assert 'Активной сессии' in messages[4]
+    assert 'Core недоступен' in messages[5]
+
+
+def test_connected_role_commands():
+    async def scenario():
+        core = SimpleNamespace(
+            assign_master=AsyncMock(),
+            register_player=AsyncMock(return_value=PlayerRegistration('registered', 'Tilly')),
+        )
+        bot = SimpleNamespace(
+            send_message=AsyncMock(),
+            get_chat_member=AsyncMock(return_value=SimpleNamespace(status='administrator')),
+            set_chat_member_tag=AsyncMock(),
+        )
+        context = SimpleNamespace(
+            args=[], bot=bot, application=SimpleNamespace(bot_data={'core_client': core})
+        )
+        master_update, _ = make_update(7)
+        await commands.master(master_update, context)
+        player_update, _ = make_update(8)
+        context.args = ['Tilly']
+        bot.get_chat_member.return_value.status = 'member'
+        await commands.player(player_update, context)
+        return core, bot
+
+    core, bot = asyncio.run(scenario())
+    core.assign_master.assert_awaited_once_with(-100, 7, 'Campaign')
+    core.register_player.assert_awaited_once_with(-100, 8, 'Tilly', 'Campaign')
+    bot.set_chat_member_tag.assert_awaited_once_with(chat_id=-100, user_id=8, tag='Tilly')
+
+
+def test_connected_role_commands_report_core_errors_and_conflict():
+    async def scenario():
+        core = SimpleNamespace(
+            assign_master=AsyncMock(side_effect=CoreClientError('offline')),
+            register_player=AsyncMock(
+                side_effect=[
+                    PlayerRegistration('master_conflict'),
+                    CoreClientError('offline'),
+                ]
+            ),
+        )
+        bot = SimpleNamespace(
+            send_message=AsyncMock(),
+            get_chat_member=AsyncMock(return_value=SimpleNamespace(status='administrator')),
+        )
+        context = SimpleNamespace(
+            args=[], bot=bot, application=SimpleNamespace(bot_data={'core_client': core})
+        )
+        update, _ = make_update(7)
+        await commands.master(update, context)
+        master_error = bot.send_message.await_args.kwargs['text']
+        context.args = ['Hero']
+        await commands.player(update, context)
+        conflict = bot.send_message.await_args.kwargs['text']
+        await commands.player(update, context)
+        player_error = bot.send_message.await_args.kwargs['text']
+        return master_error, conflict, player_error
+
+    master_error, conflict, player_error = asyncio.run(scenario())
+    assert 'Core недоступен' in master_error
+    assert 'не может зарегистрироваться' in conflict
+    assert 'Core недоступен' in player_error

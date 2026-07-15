@@ -4,6 +4,7 @@ from services.campaigns import (
     PlayerRegistration,
     PlayerRegistrationStatus,
 )
+from services.outbox import OutboxEvent, OutboxService
 from services.sessions import (
     ScheduleUpdate,
     SessionService,
@@ -24,4 +25,6 @@ __all__ = [
     'SessionStartStatus',
     'SessionStop',
     'SessionStopStatus',
+    'OutboxEvent',
+    'OutboxService',
 ]

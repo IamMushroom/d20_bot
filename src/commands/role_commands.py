@@ -9,6 +9,7 @@ from commands.member_tags import (
     TAG_UNSUPPORTED,
     set_member_tag,
 )
+from core import CORE_CLIENT_KEY, CoreClient, CoreClientError
 from services import PlayerRegistrationStatus
 
 MAX_TAG_LENGTH = 16
@@ -43,8 +44,21 @@ async def master(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         return
 
-    service = campaign_service(context)
-    await service.assign_master(chat.id, target.id, getattr(chat, 'title', None))
+    core: CoreClient | None = context.application.bot_data.get(CORE_CLIENT_KEY)
+    try:
+        if core is not None:
+            await core.assign_master(chat.id, target.id, getattr(chat, 'title', None))
+        else:
+            await campaign_service(context).assign_master(
+                chat.id, target.id, getattr(chat, 'title', None)
+            )
+    except CoreClientError:
+        await context.bot.send_message(
+            chat_id=chat.id,
+            text='⚠️ Core недоступен или отклонил запрос.',
+            reply_to_message_id=message.id,
+        )
+        return
     await context.bot.send_message(
         chat_id=chat.id,
         text=f'🎭 Мастер кампании назначен: {target.full_name}',
@@ -68,21 +82,39 @@ async def player(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         return
 
-    service = campaign_service(context)
-    result = await service.register_player(chat.id, user.id, name, getattr(chat, 'title', None))
-    if result.status is PlayerRegistrationStatus.MASTER_CONFLICT:
+    core: CoreClient | None = context.application.bot_data.get(CORE_CLIENT_KEY)
+    try:
+        if core is not None:
+            remote = await core.register_player(
+                chat.id, user.id, name, getattr(chat, 'title', None)
+            )
+            status = remote.status
+            character_name = remote.name
+        else:
+            local = await campaign_service(context).register_player(
+                chat.id, user.id, name, getattr(chat, 'title', None)
+            )
+            status = local.status
+            character_name = local.character.name if local.character is not None else None
+    except CoreClientError:
+        await context.bot.send_message(
+            chat_id=chat.id,
+            text='⚠️ Core недоступен или отклонил запрос.',
+            reply_to_message_id=message.id,
+        )
+        return
+    if status is PlayerRegistrationStatus.MASTER_CONFLICT or status == 'master_conflict':
         await context.bot.send_message(
             chat_id=chat.id,
             text='⚠️ Мастер уже имеет роль «Мастер» и не может зарегистрироваться игроком.',
             reply_to_message_id=message.id,
         )
         return
-    character = result.character
-    assert character is not None
+    assert character_name is not None
     tag_result = (
         TAG_UNSUPPORTED
         if getattr(chat, 'type', None) == 'private'
-        else await set_member_tag(context, chat.id, user.id, character.name)
+        else await set_member_tag(context, chat.id, user.id, character_name)
     )
     if tag_result == TAG_SET:
         suffix = ''
@@ -94,6 +126,6 @@ async def player(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         suffix = '\nℹ️ Персонаж сохранён, но Telegram-тег установить не удалось.'
     await context.bot.send_message(
         chat_id=chat.id,
-        text=f'🧙 Игрок зарегистрирован: {character.name}{suffix}',
+        text=f'🧙 Игрок зарегистрирован: {character_name}{suffix}',
         reply_to_message_id=message.id,
     )

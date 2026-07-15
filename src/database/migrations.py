@@ -1,6 +1,7 @@
 import re
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 from database.connection import Database
 
@@ -17,7 +18,7 @@ async def apply_migrations(database: Database, directory: Path) -> None:
         """
     )
     rows = await database.fetch_all('SELECT version FROM schema_migrations')
-    applied = {int(row['version']) for row in rows}
+    applied = {cast(int, row['version']) for row in rows}
 
     migrations: list[tuple[int, Path]] = []
     for path in directory.glob('*.sql'):

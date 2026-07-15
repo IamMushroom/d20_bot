@@ -9,6 +9,7 @@ from telegram.error import BadRequest
 import commands
 from commands.game_utils import parse_game_date, valid_url
 from commands.helpers import CAMPAIGN_SERVICE_KEY, DATABASE_KEY, SESSION_SERVICE_KEY
+from core import CoreClientError, ScheduledGame
 from database import SQLiteDatabase, apply_migrations
 from services import CampaignService, SessionService
 
@@ -270,3 +271,76 @@ def test_game_url_rejects_non_admin_and_invalid_url(tmp_path):
     assert 'только администраторы' in denied
     assert 'Формат' in invalid
     assert saved is None
+
+
+def test_connected_game_and_url_commands(monkeypatch):
+    monkeypatch.setenv('GAME_TIMEZONE', 'UTC')
+
+    async def scenario():
+        core = SimpleNamespace(
+            get_game=AsyncMock(return_value='📅 remote game'),
+            schedule_game=AsyncMock(return_value=ScheduledGame(5, '🎲 scheduled remotely', 44)),
+            set_game_announcement=AsyncMock(),
+            get_game_url=AsyncMock(return_value='https://foundry.remote'),
+            set_game_url=AsyncMock(),
+        )
+        bot = SimpleNamespace(
+            send_message=AsyncMock(return_value=SimpleNamespace(id=55)),
+            pin_chat_message=AsyncMock(),
+            unpin_chat_message=AsyncMock(),
+        )
+        context = SimpleNamespace(
+            args=[], bot=bot, application=SimpleNamespace(bot_data={'core_client': core})
+        )
+        update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=10, type='private', title='Campaign'),
+            effective_message=SimpleNamespace(id=11),
+            effective_user=SimpleNamespace(id=12),
+        )
+        await commands.game(update, context)
+        await commands.game_url(update, context)
+        context.args = ['20.07.2026', '19:00']
+        await commands.game(update, context)
+        context.args = ['https://foundry.new']
+        await commands.game_url(update, context)
+        return core, bot
+
+    core, bot = asyncio.run(scenario())
+    core.get_game.assert_awaited_once_with(10)
+    core.schedule_game.assert_awaited_once()
+    core.set_game_announcement.assert_awaited_once_with(5, 55)
+    core.set_game_url.assert_awaited_once_with(10, 'https://foundry.new')
+    bot.pin_chat_message.assert_awaited_once()
+    bot.unpin_chat_message.assert_awaited_once_with(chat_id=10, message_id=44)
+
+
+def test_connected_game_reports_core_errors():
+    async def scenario():
+        core = SimpleNamespace(
+            get_game=AsyncMock(side_effect=CoreClientError('offline')),
+            schedule_game=AsyncMock(side_effect=CoreClientError('offline')),
+            get_game_url=AsyncMock(side_effect=CoreClientError('offline')),
+            set_game_url=AsyncMock(side_effect=CoreClientError('offline')),
+        )
+        bot = SimpleNamespace(send_message=AsyncMock())
+        context = SimpleNamespace(
+            args=[], bot=bot, application=SimpleNamespace(bot_data={'core_client': core})
+        )
+        update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=10, type='private', title=None),
+            effective_message=SimpleNamespace(id=11),
+            effective_user=SimpleNamespace(id=12),
+        )
+        await commands.game(update, context)
+        await commands.game_url(update, context)
+        context.args = ['20.07.2026', '19:00']
+        await commands.game(update, context)
+        context.args = ['https://foundry.new']
+        await commands.game_url(update, context)
+        return bot
+
+    bot = asyncio.run(scenario())
+    assert all(
+        'Core' in call.kwargs['text'] or 'не задан' in call.kwargs['text']
+        for call in bot.send_message.await_args_list
+    )

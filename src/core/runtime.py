@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from database import Database, apply_migrations, create_database
-from services import CampaignService, SessionService
+from services import CampaignService, OutboxService, SessionService
 from web import AdminAccessService, AdminWebServer
 
 
@@ -11,6 +11,7 @@ class CoreRuntime:
     database: Database
     campaigns: CampaignService
     sessions: SessionService
+    outbox: OutboxService
     access: AdminAccessService
     web_server: AdminWebServer
     web_base_url: str
@@ -25,19 +26,19 @@ class CoreRuntime:
         web_port: int,
         web_base_url: str,
         internal_token: str,
-        telegram_bot,
     ) -> CoreRuntime:
         database = await create_database(database_url)
         try:
             await apply_migrations(database, migrations_directory)
             campaigns = CampaignService(database)
             sessions = SessionService(database)
+            outbox = OutboxService(database)
             access = AdminAccessService()
             web_server = AdminWebServer(
                 access,
                 campaigns,
                 sessions,
-                telegram_bot,
+                outbox,
                 internal_token=internal_token,
                 web_base_url=web_base_url,
             )
@@ -49,6 +50,7 @@ class CoreRuntime:
             database=database,
             campaigns=campaigns,
             sessions=sessions,
+            outbox=outbox,
             access=access,
             web_server=web_server,
             web_base_url=web_base_url,

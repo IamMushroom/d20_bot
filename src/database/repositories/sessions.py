@@ -1,5 +1,6 @@
 import sqlite3
 from datetime import UTC, datetime
+from typing import cast
 
 from database.connection import Database, Row
 from database.models import Session
@@ -14,9 +15,9 @@ def _session(row: Row) -> Session:
     started_at = row['started_at']
     finished_at = row['finished_at']
     return Session(
-        id=int(row['id']),
-        campaign_id=int(row['campaign_id']),
-        number=int(row['number']),
+        id=cast(int, row['id']),
+        campaign_id=cast(int, row['campaign_id']),
+        number=cast(int, row['number']),
         title=str(row['title']) if row['title'] is not None else None,
         scheduled_at=(
             datetime.fromisoformat(str(scheduled_at)) if scheduled_at is not None else None
@@ -24,7 +25,7 @@ def _session(row: Row) -> Session:
         started_at=datetime.fromisoformat(str(started_at)) if started_at is not None else None,
         finished_at=datetime.fromisoformat(str(finished_at)) if finished_at is not None else None,
         foundry_url=str(row['foundry_url']) if row['foundry_url'] is not None else None,
-        message_id=int(row['message_id']) if row['message_id'] is not None else None,
+        message_id=(cast(int, row['message_id']) if row['message_id'] is not None else None),
         updated_at=datetime.fromisoformat(str(row['updated_at'])),
     )
 

@@ -7,12 +7,11 @@ from telegram.ext import ContextTypes
 
 from commands.game_utils import valid_url
 from commands.helpers import campaign_service, is_admin, session_service
-from core import CoreClient, CoreClientError
+from core import CORE_CLIENT_KEY, CoreClient, CoreClientError
 from web.access import AdminAccessService, AdminIdentity
 
 ADMIN_ACCESS_KEY = 'admin_access'
 WEB_BASE_URL_KEY = 'web_base_url'
-CORE_CLIENT_KEY = 'core_client'
 
 
 async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -84,11 +83,17 @@ async def web_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
     if chat is None or message is None:
         return
-    service = session_service(context)
+    core: CoreClient | None = context.application.bot_data.get(CORE_CLIENT_KEY)
     if not context.args:
-        value = await service.get_web_base_url(chat.id) or context.application.bot_data.get(
-            WEB_BASE_URL_KEY
-        )
+        try:
+            value = (
+                await core.get_web_url(chat.id)
+                if core is not None
+                else await session_service(context).get_web_base_url(chat.id)
+                or context.application.bot_data.get(WEB_BASE_URL_KEY)
+            )
+        except CoreClientError:
+            value = None
         text = f'🌐 Адрес панели: {value}' if value else '📭 Адрес панели пока не задан.'
         await context.bot.send_message(chat_id=chat.id, text=text, reply_to_message_id=message.id)
         return
@@ -111,7 +116,18 @@ async def web_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         return
     value = context.args[0].rstrip('/')
-    await service.set_web_base_url(chat.id, value, datetime.now(UTC))
+    try:
+        if core is not None:
+            await core.set_web_url(chat.id, value)
+        else:
+            await session_service(context).set_web_base_url(chat.id, value, datetime.now(UTC))
+    except CoreClientError:
+        await context.bot.send_message(
+            chat_id=chat.id,
+            text='⚠️ Core недоступен или отклонил запрос.',
+            reply_to_message_id=message.id,
+        )
+        return
     await context.bot.send_message(
         chat_id=chat.id,
         text=f'✅ Адрес панели сохранён: {value}',

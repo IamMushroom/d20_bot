@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import cast
 
 from database.connection import Database, Row
 from database.models import Campaign
@@ -6,10 +7,12 @@ from database.models import Campaign
 
 def _campaign(row: Row) -> Campaign:
     return Campaign(
-        id=int(row['id']),
-        chat_id=int(row['chat_id']),
+        id=cast(int, row['id']),
+        chat_id=cast(int, row['chat_id']),
         title=str(row['title']) if row['title'] is not None else None,
-        master_user_id=(int(row['master_user_id']) if row['master_user_id'] is not None else None),
+        master_user_id=(
+            cast(int, row['master_user_id']) if row['master_user_id'] is not None else None
+        ),
         created_at=datetime.fromisoformat(str(row['created_at'])),
     )
 

@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import cast
 
 from database.connection import Database, Row
 from database.models import Character
@@ -6,9 +7,9 @@ from database.models import Character
 
 def _character(row: Row) -> Character:
     return Character(
-        id=int(row['id']),
-        campaign_id=int(row['campaign_id']),
-        telegram_user_id=int(row['telegram_user_id']),
+        id=cast(int, row['id']),
+        campaign_id=cast(int, row['campaign_id']),
+        telegram_user_id=cast(int, row['telegram_user_id']),
         name=str(row['name']),
         created_at=datetime.fromisoformat(str(row['created_at'])),
         updated_at=datetime.fromisoformat(str(row['updated_at'])),

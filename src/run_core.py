@@ -4,7 +4,6 @@ from os import getenv
 from pathlib import Path
 
 from dotenv import load_dotenv
-from telegram import Bot
 
 import log_format
 from core import CoreRuntime
@@ -20,8 +19,6 @@ def required_environment(name: str) -> str:
 
 
 async def run_core() -> None:
-    telegram_bot = Bot(required_environment('TG_TOKEN'))
-    await telegram_bot.initialize()
     runtime: CoreRuntime | None = None
     try:
         runtime = await CoreRuntime.start(
@@ -31,13 +28,11 @@ async def run_core() -> None:
             web_port=int(getenv('WEB_PORT', '8190')),
             web_base_url=getenv('WEB_BASE_URL', '').strip(),
             internal_token=required_environment('CORE_TOKEN'),
-            telegram_bot=telegram_bot,
         )
         await runtime.web_server.serve_forever()
     finally:
         if runtime is not None:
             await runtime.close()
-        await telegram_bot.shutdown()
 
 
 def bootstrap() -> None:

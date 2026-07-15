@@ -10,6 +10,7 @@ services:
       LOG_FORMAT: ${LOG_FORMAT:-json}
       CORE_URL: ${CORE_URL:-http://core:8190}
       CORE_TOKEN: ${CORE_TOKEN:-}
+      GAME_TIMEZONE: ${GAME_TIMEZONE:-Europe/Moscow}
     tmpfs:
       - /tmp:size=16m,mode=1777
     security_opt:
@@ -38,7 +39,6 @@ services:
     init: true
     read_only: true
     environment:
-      TG_TOKEN: ${TG_TOKEN:?Set TG_TOKEN in .env}
       CORE_TOKEN: ${CORE_TOKEN:-}
       LOG_FORMAT: ${LOG_FORMAT:-json}
       DATABASE_URL: ${DATABASE_URL:-sqlite:////data/d20.sqlite3}

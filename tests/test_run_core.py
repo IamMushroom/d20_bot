@@ -1,5 +1,4 @@
 import asyncio
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -9,12 +8,10 @@ import run_core
 
 def test_run_core_starts_and_stops_runtime(monkeypatch, tmp_path):
     async def scenario():
-        bot = SimpleNamespace(initialize=AsyncMock(), shutdown=AsyncMock())
-        runtime = SimpleNamespace(
-            web_server=SimpleNamespace(serve_forever=AsyncMock()), close=AsyncMock()
-        )
+        runtime = Mock()
+        runtime.web_server.serve_forever = AsyncMock()
+        runtime.close = AsyncMock()
         values = {
-            'TG_TOKEN': 'telegram-token',
             'CORE_TOKEN': 'core-token',
             'DATABASE_URL': 'sqlite:///:memory:',
             'WEB_HOST': '127.0.0.1',
@@ -22,37 +19,23 @@ def test_run_core_starts_and_stops_runtime(monkeypatch, tmp_path):
             'WEB_BASE_URL': 'https://d20.example',
         }
         monkeypatch.setattr(run_core, 'getenv', lambda name, default='': values.get(name, default))
-        monkeypatch.setattr(run_core, 'Bot', Mock(return_value=bot))
         start = AsyncMock(return_value=runtime)
         monkeypatch.setattr(run_core.CoreRuntime, 'start', start)
         monkeypatch.setattr(run_core, 'MIGRATIONS_DIRECTORY', tmp_path)
 
         await run_core.run_core()
-        return bot, runtime, start
+        return runtime, start
 
-    bot, runtime, start = asyncio.run(scenario())
-    bot.initialize.assert_awaited_once()
+    runtime, start = asyncio.run(scenario())
     start.assert_awaited_once()
     runtime.web_server.serve_forever.assert_awaited_once()
     runtime.close.assert_awaited_once()
-    bot.shutdown.assert_awaited_once()
 
 
-def test_run_core_requires_environment_and_shuts_down_bot(monkeypatch):
+def test_run_core_requires_environment(monkeypatch):
     monkeypatch.setattr(run_core, 'getenv', lambda _name, default='': default)
-    with pytest.raises(RuntimeError, match='TG_TOKEN'):
-        asyncio.run(run_core.run_core())
-
-    bot = SimpleNamespace(initialize=AsyncMock(), shutdown=AsyncMock())
-    monkeypatch.setattr(
-        run_core,
-        'getenv',
-        lambda name, default='': 'telegram-token' if name == 'TG_TOKEN' else default,
-    )
-    monkeypatch.setattr(run_core, 'Bot', Mock(return_value=bot))
     with pytest.raises(RuntimeError, match='CORE_TOKEN'):
         asyncio.run(run_core.run_core())
-    bot.shutdown.assert_awaited_once()
 
 
 def test_core_bootstrap_configures_logging(monkeypatch):

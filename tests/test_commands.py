@@ -85,7 +85,7 @@ def test_help_sends_command_reference():
 
     asyncio.run(commands.help_command(update, context))
 
-    assert context.bot.send_message.await_args.kwargs['text'] == commands.HELP_MESSAGE
+    assert context.bot.send_message.await_args.kwargs['text'] == commands.BASIC_HELP_MESSAGE
 
 
 def test_timer_creates_independent_background_tasks():

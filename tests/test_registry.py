@@ -44,7 +44,7 @@ def test_only_basic_rolls_are_shown_in_quick_menu():
 
 
 def test_standalone_registry_excludes_platform_commands():
-    standalone = commands.commands_for(platform_enabled=False)
+    standalone = commands.commands_for(core_connected=False)
     assert {command.name for command in standalone} == {
         'roll',
         'roll20',
@@ -58,7 +58,7 @@ def test_standalone_registry_excludes_platform_commands():
 
 
 def test_connected_registry_only_adds_remote_commands():
-    connected = commands.commands_for(platform_enabled=False, core_connected=True)
+    connected = commands.commands_for(core_connected=True)
 
     assert {command.name for command in connected} == {
         'roll',
@@ -68,6 +68,13 @@ def test_connected_registry_only_adds_remote_commands():
         'help',
         'version',
         'admin',
+        'game',
+        'game_url',
+        'session_start',
+        'session_stop',
+        'master',
+        'player',
+        'web_url',
     }
-    assert '/admin' in commands.help_message(platform_enabled=False, core_connected=True)
-    assert '/game' not in commands.help_message(platform_enabled=False, core_connected=True)
+    assert '/admin' in commands.help_message(core_connected=True)
+    assert '/game' in commands.help_message(core_connected=True)

@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import cast
 
 from database.connection import Database, Row
 from database.models import RecapEntry
@@ -6,11 +7,11 @@ from database.models import RecapEntry
 
 def _recap(row: Row) -> RecapEntry:
     return RecapEntry(
-        id=int(row['id']),
-        session_id=int(row['session_id']),
-        character_id=int(row['character_id']),
+        id=cast(int, row['id']),
+        session_id=cast(int, row['session_id']),
+        character_id=cast(int, row['character_id']),
         text=str(row['text']),
-        position=int(row['position']),
+        position=cast(int, row['position']),
         created_at=datetime.fromisoformat(str(row['created_at'])),
         updated_at=datetime.fromisoformat(str(row['updated_at'])),
     )

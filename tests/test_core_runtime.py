@@ -1,6 +1,5 @@
 import asyncio
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -21,7 +20,6 @@ def test_core_runtime_owns_database_services_and_web_server(tmp_path):
             web_port=0,
             web_base_url='https://d20.example',
             internal_token='secret',
-            telegram_bot=SimpleNamespace(),
         )
         assert runtime.web_server._server is not None
         assert runtime.web_base_url == 'https://d20.example'
@@ -50,7 +48,6 @@ def test_core_runtime_closes_database_when_start_fails(monkeypatch, tmp_path):
                 web_port=0,
                 web_base_url='',
                 internal_token='secret',
-                telegram_bot=SimpleNamespace(),
             )
         return database
 
