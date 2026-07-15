@@ -13,6 +13,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen
 
 COPY pytest.ini ./
+COPY migrations ./migrations
 COPY src ./src
 COPY tests ./tests
 
@@ -28,6 +29,7 @@ RUN uv sync --frozen --no-dev \
     && adduser -S bot -G bot
 
 COPY --chown=bot:bot src ./src
+COPY --chown=bot:bot migrations ./migrations
 
 USER bot
 

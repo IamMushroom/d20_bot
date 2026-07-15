@@ -7,6 +7,11 @@ services:
     environment:
       TG_TOKEN: ${TG_TOKEN:?Set TG_TOKEN in .env}
       LOG_FORMAT: ${LOG_FORMAT:-json}
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////data/d20.sqlite3}
+      GAME_TIMEZONE: ${GAME_TIMEZONE:-Europe/Moscow}
+      FOUNDRY_URL: ${FOUNDRY_URL:-}
+    volumes:
+      - d20-data:/data
     tmpfs:
       - /tmp:size=16m,mode=1777
     security_opt:
@@ -26,3 +31,6 @@ services:
           memory: 150M
         reservations:
           memory: 20M
+
+volumes:
+  d20-data:

@@ -46,6 +46,12 @@ pip-wheel-metadata/
 
 # Logs and runtime files
 *.log
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
+data/
+.codex-context.md
+DEV_CHANGELOG.md
 *.pid
 
 # Operating system files

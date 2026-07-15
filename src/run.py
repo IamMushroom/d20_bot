@@ -1,5 +1,6 @@
 import logging
 from os import getenv
+from pathlib import Path
 
 from dotenv import load_dotenv
 from telegram import BotCommand
@@ -7,6 +8,10 @@ from telegram.ext import ApplicationBuilder, CommandHandler, filters
 
 import commands
 import log_format
+from database import apply_migrations, create_database
+
+DATABASE_KEY = 'database'
+MIGRATIONS_DIRECTORY = Path(__file__).resolve().parent.parent / 'migrations'
 
 
 async def set_bot_commands(application) -> None:
@@ -14,6 +19,24 @@ async def set_bot_commands(application) -> None:
         [BotCommand(command.name, command.menu_description) for command in commands.COMMANDS]
     )
     logging.info('Application started')
+
+
+async def initialize_application(application) -> None:
+    database_url = getenv('DATABASE_URL', 'sqlite:///data/d20.sqlite3')
+    database = await create_database(database_url)
+    try:
+        await apply_migrations(database, MIGRATIONS_DIRECTORY)
+    except BaseException:
+        await database.close()
+        raise
+    application.bot_data[DATABASE_KEY] = database
+    await set_bot_commands(application)
+
+
+async def shutdown_application(application) -> None:
+    database = application.bot_data.pop(DATABASE_KEY, None)
+    if database is not None:
+        await database.close()
 
 
 def main() -> None:
@@ -24,7 +47,12 @@ def main() -> None:
         raise RuntimeError('TG_TOKEN environment variable is not set')
     logging.info('Token has been successfully loaded')
     app = (
-        ApplicationBuilder().token(token).concurrent_updates(16).post_init(set_bot_commands).build()
+        ApplicationBuilder()
+        .token(token)
+        .concurrent_updates(16)
+        .post_init(initialize_application)
+        .post_shutdown(shutdown_application)
+        .build()
     )
     for command in commands.COMMANDS:
         for name in (command.name, *command.aliases):

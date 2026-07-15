@@ -18,6 +18,9 @@
 - `/duality` — бросок двух d12 надежды и страха для Daggerheart.
 - `/duality 5` — брсок Daggerheart с модификатором.
 - `/timer 60` — таймер на 60 секунд.
+- `/game` — показать дату следующей игры и ссылку на Foundry.
+- `/game 20.07 19:00` — назначить игру со ссылкой из `FOUNDRY_URL` и закрепить объявление (для администратора чата).
+- `/game 20.07 19:00 https://foundry.example` — назначить игру, переопределив ссылку для неё.
 - `/start` и `/help` — справка по командам.
 - `/version` — текущая версия бота.
 
@@ -59,6 +62,9 @@ d20
 | `TG_TOKEN` | да | — | Токен бота от [@BotFather](https://t.me/BotFather). |
 | `LOG_FORMAT` | нет | `json` | Формат логов. Сейчас поддерживается `json`. |
 | `DOCKER_TAG` | нет | `latest` | Тег Docker-образа для Compose. |
+| `DATABASE_URL` | нет | `sqlite:////data/d20.sqlite3` | URL файла SQLite. |
+| `GAME_TIMEZONE` | нет | `Europe/Moscow` | Часовой пояс расписания игр. |
+| `FOUNDRY_URL` | нет | — | Ссылка на Foundry по умолчанию для команды `/game`. |
 
 ## Локальный запуск
 
@@ -82,6 +88,7 @@ python src\run.py
 TG_TOKEN=<telegram-token>
 LOG_FORMAT=json
 DOCKER_TAG=latest
+DATABASE_URL=sqlite:////data/d20.sqlite3
 ```
 
 Запуск:

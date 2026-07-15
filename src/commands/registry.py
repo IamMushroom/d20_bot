@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from commands.duality_commands import duality
+from commands.game_commands import game
 from commands.help_commands import help_command
 from commands.roll_commands import roll, roll20
 from commands.timer_commands import timer
@@ -21,6 +22,15 @@ class CommandSpec:
 
 
 COMMANDS = (
+    CommandSpec(
+        name='game',
+        callback=game,
+        menu_description='показать или назначить следующую игру',
+        help_lines=(
+            '/game — показать следующую игру',
+            '/game 20.07 19:00 [ссылка] — назначить игру (для администраторов)',
+        ),
+    ),
     CommandSpec(
         name='roll',
         callback=roll,
