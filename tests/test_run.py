@@ -106,5 +106,19 @@ def test_initialize_application_closes_database_after_migration_error(monkeypatc
     database.close.assert_awaited_once_with()
 
 
+def test_initialize_application_uses_absolute_container_database_path(monkeypatch, tmp_path):
+    database = AsyncMock()
+    create_database = AsyncMock(return_value=database)
+    monkeypatch.delenv('DATABASE_URL', raising=False)
+    monkeypatch.setattr(run, 'create_database', create_database)
+    monkeypatch.setattr(run, 'apply_migrations', AsyncMock())
+    monkeypatch.setattr(run, 'set_bot_commands', AsyncMock())
+    monkeypatch.setattr(run, 'MIGRATIONS_DIRECTORY', tmp_path)
+
+    asyncio.run(run.initialize_application(SimpleNamespace(bot_data={})))
+
+    create_database.assert_awaited_once_with('sqlite:////data/d20.sqlite3')
+
+
 def test_shutdown_application_without_database():
     asyncio.run(run.shutdown_application(SimpleNamespace(bot_data={})))

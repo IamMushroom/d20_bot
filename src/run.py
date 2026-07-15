@@ -22,7 +22,7 @@ async def set_bot_commands(application) -> None:
 
 
 async def initialize_application(application) -> None:
-    database_url = getenv('DATABASE_URL', 'sqlite:///data/d20.sqlite3')
+    database_url = getenv('DATABASE_URL', 'sqlite:////data/d20.sqlite3')
     database = await create_database(database_url)
     try:
         await apply_migrations(database, MIGRATIONS_DIRECTORY)
