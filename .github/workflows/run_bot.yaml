@@ -61,6 +61,7 @@ jobs:
           D20_BOT_DOCKER_TAG: ${{ steps.variables.outputs.tag }}
           D20_BOT_TG_TOKEN: ${{ secrets.TG_TOKEN }}
           D20_BOT_MODE: ${{ vars.D20_MODE }}
+          D20_BOT_CORE_TOKEN: ${{ secrets.CORE_TOKEN }}
         shell: bash
         run: |
           docker compose -p "${{ steps.variables.outputs.project }}" config --quiet
