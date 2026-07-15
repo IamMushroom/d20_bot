@@ -7,11 +7,21 @@ from unittest.mock import AsyncMock
 from telegram.error import BadRequest
 
 import commands
-import commands.campaign_commands as campaign_commands
+import commands.member_tags as member_tags
+from commands.helpers import CAMPAIGN_SERVICE_KEY, DATABASE_KEY, SESSION_SERVICE_KEY
 from database import SQLiteDatabase, apply_migrations
 from database.repositories import CampaignRepository, SessionRepository
+from services import CampaignService, SessionService
 
 MIGRATIONS = Path(__file__).resolve().parent.parent / 'migrations'
+
+
+def bot_data(database):
+    return {
+        DATABASE_KEY: database,
+        CAMPAIGN_SERVICE_KEY: CampaignService(database),
+        SESSION_SERVICE_KEY: SessionService(database),
+    }
 
 
 def make_update(user_id=7, *, status='administrator'):
@@ -42,7 +52,7 @@ def test_master_player_and_session_lifecycle(tmp_path):
             unpin_chat_message=AsyncMock(),
         )
         context = SimpleNamespace(
-            args=[], bot=bot, application=SimpleNamespace(bot_data={'database': database})
+            args=[], bot=bot, application=SimpleNamespace(bot_data=bot_data(database))
         )
         master_update, _ = make_update(7)
         await commands.master(master_update, context)
@@ -89,7 +99,7 @@ def test_role_and_session_validation_messages(tmp_path, caplog):
             unpin_chat_message=AsyncMock(),
         )
         context = SimpleNamespace(
-            args=[], bot=bot, application=SimpleNamespace(bot_data={'database': database})
+            args=[], bot=bot, application=SimpleNamespace(bot_data=bot_data(database))
         )
         update, _ = make_update(10)
         await commands.master(update, context)
@@ -109,7 +119,7 @@ def test_role_and_session_validation_messages(tmp_path, caplog):
 
         bot.get_chat_member.return_value.status = 'administrator'
         await commands.master(update, context)
-        tag_warning = bot.send_message.await_args.kwargs['text']
+        master_text = bot.send_message.await_args.kwargs['text']
         await commands.session_stop(update, context)
         no_active_text = bot.send_message.await_args.kwargs['text']
         await database.close()
@@ -118,7 +128,7 @@ def test_role_and_session_validation_messages(tmp_path, caplog):
             invalid_player_text,
             player_tag_warning,
             non_master_text,
-            tag_warning,
+            master_text,
             no_active_text,
         )
 
@@ -128,7 +138,7 @@ def test_role_and_session_validation_messages(tmp_path, caplog):
     assert 'до 16' in messages[1]
     assert 'тег установить не удалось' in messages[2]
     assert 'назначенный мастер' in messages[3]
-    assert 'Задайте заголовок' in messages[4]
+    assert messages[4] == '🎭 Мастер кампании назначен: User 10'
     assert 'Активной сессии' in messages[5]
     tag_record = next(
         record for record in caplog.records if getattr(record, 'telegram_method', None)
@@ -150,7 +160,7 @@ def test_master_rejects_bot_selected_by_reply(tmp_path):
             set_chat_member_tag=AsyncMock(),
         )
         context = SimpleNamespace(
-            args=[], bot=bot, application=SimpleNamespace(bot_data={'database': database})
+            args=[], bot=bot, application=SimpleNamespace(bot_data=bot_data(database))
         )
         update, _ = make_update(7)
         update.effective_message.reply_to_message = SimpleNamespace(
@@ -174,7 +184,7 @@ def test_master_cannot_register_as_player(tmp_path):
         await CampaignRepository(database).set_master(-100, 7, 'Campaign')
         bot = SimpleNamespace(send_message=AsyncMock(), set_chat_member_tag=AsyncMock())
         context = SimpleNamespace(
-            args=['Герой'], bot=bot, application=SimpleNamespace(bot_data={'database': database})
+            args=['Герой'], bot=bot, application=SimpleNamespace(bot_data=bot_data(database))
         )
         update, _ = make_update(7)
         await commands.player(update, context)
@@ -198,7 +208,7 @@ def test_session_start_reports_existing_active_session(tmp_path):
         await SessionRepository(database).start(campaign.id, 'Already running')
         bot = SimpleNamespace(send_message=AsyncMock(), unpin_chat_message=AsyncMock())
         context = SimpleNamespace(
-            args=[], bot=bot, application=SimpleNamespace(bot_data={'database': database})
+            args=[], bot=bot, application=SimpleNamespace(bot_data=bot_data(database))
         )
         update, _ = make_update(7)
         await commands.session_start(update, context)
@@ -228,7 +238,7 @@ def test_session_start_survives_unpin_failure(tmp_path):
             unpin_chat_message=AsyncMock(side_effect=BadRequest('cannot unpin')),
         )
         context = SimpleNamespace(
-            args=[], bot=bot, application=SimpleNamespace(bot_data={'database': database})
+            args=[], bot=bot, application=SimpleNamespace(bot_data=bot_data(database))
         )
         update, _ = make_update(7)
         await commands.session_start(update, context)
@@ -249,13 +259,13 @@ def test_set_tag_logs_get_chat_member_failure(caplog):
                 set_chat_member_tag=AsyncMock(),
             )
         )
-        result = await campaign_commands._set_tag(context, -100, 7, 'Мастер')
+        result = await member_tags.set_member_tag(context, -100, 7, 'Мастер')
         return context.bot, result
 
     with caplog.at_level('WARNING'):
         bot, result = asyncio.run(scenario())
 
-    assert result == campaign_commands.TAG_FAILED
+    assert result == member_tags.TAG_FAILED
     bot.set_chat_member_tag.assert_not_awaited()
     record = next(record for record in caplog.records if record.message.startswith('Could not get'))
     assert record.telegram_method == 'getChatMember'
@@ -270,7 +280,7 @@ def test_private_chat_saves_master_without_attempting_tag(tmp_path):
         await apply_migrations(database, MIGRATIONS)
         bot = SimpleNamespace(send_message=AsyncMock(), set_chat_member_tag=AsyncMock())
         context = SimpleNamespace(
-            args=[], bot=bot, application=SimpleNamespace(bot_data={'database': database})
+            args=[], bot=bot, application=SimpleNamespace(bot_data=bot_data(database))
         )
         update, _ = make_update(7)
         update.effective_chat.type = 'private'
@@ -281,5 +291,5 @@ def test_private_chat_saves_master_without_attempting_tag(tmp_path):
 
     bot, campaign = asyncio.run(scenario())
     assert campaign is not None and campaign.master_user_id == 7
-    assert 'теги доступны только в группах' in bot.send_message.await_args.kwargs['text']
+    assert bot.send_message.await_args.kwargs['text'] == '🎭 Мастер кампании назначен: User 7'
     bot.set_chat_member_tag.assert_not_awaited()

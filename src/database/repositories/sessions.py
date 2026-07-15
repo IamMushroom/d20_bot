@@ -1,7 +1,12 @@
+import sqlite3
 from datetime import UTC, datetime
 
 from database.connection import Database, Row
 from database.models import Session
+
+
+class ActiveSessionExistsError(Exception):
+    """Raised when a campaign already has an active session."""
 
 
 def _session(row: Row) -> Session:
@@ -41,15 +46,20 @@ class SessionRepository:
         )
         if planned is not None:
             return _session(planned)
-        row = await self._database.fetch_one(
-            """
-            INSERT INTO sessions (campaign_id, number, title, started_at, updated_at)
-            SELECT ?, COALESCE(MAX(number), 0) + 1, ?, ?, ?
-            FROM sessions WHERE campaign_id = ?
-            RETURNING *
-            """,
-            (campaign_id, title, now, now, campaign_id),
-        )
+        try:
+            row = await self._database.fetch_one(
+                """
+                INSERT INTO sessions (campaign_id, number, title, started_at, updated_at)
+                SELECT ?, COALESCE(MAX(number), 0) + 1, ?, ?, ?
+                FROM sessions WHERE campaign_id = ?
+                RETURNING *
+                """,
+                (campaign_id, title, now, now, campaign_id),
+            )
+        except sqlite3.IntegrityError as error:
+            if await self.get_active(campaign_id) is not None:
+                raise ActiveSessionExistsError from error
+            raise
         assert row is not None
         return _session(row)
 

@@ -2,11 +2,13 @@ from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from typing import Any
 
-from commands.campaign_commands import master, player, session_start, session_stop
 from commands.duality_commands import duality
-from commands.game_commands import game, game_url
+from commands.game_config_commands import game_url
+from commands.game_schedule_commands import game
 from commands.help_commands import help_command
+from commands.role_commands import master, player
 from commands.roll_commands import roll, roll20
+from commands.session_commands import session_start, session_stop
 from commands.timer_commands import timer
 from commands.version_commands import version_command
 

@@ -1,0 +1,159 @@
+import asyncio
+from datetime import UTC, datetime
+from pathlib import Path
+
+from database import SQLiteDatabase, apply_migrations
+from database.repositories import SessionRepository
+from services import (
+    CampaignService,
+    PlayerRegistrationStatus,
+    SessionService,
+    SessionStartStatus,
+    SessionStopStatus,
+)
+
+MIGRATIONS = Path(__file__).resolve().parent.parent / 'migrations'
+
+
+async def open_database(tmp_path, name: str):
+    database = await SQLiteDatabase.connect(str(tmp_path / name))
+    await apply_migrations(database, MIGRATIONS)
+    return database
+
+
+def test_campaign_service_assigns_roles_and_updates_character(tmp_path):
+    async def scenario():
+        database = await open_database(tmp_path, 'campaign-service.sqlite3')
+        service = CampaignService(database)
+
+        campaign = await service.assign_master(-100, 7, 'Campaign')
+        master_registration = await service.register_player(-100, 7, 'Мастер')
+        first = await service.register_player(-100, 8, 'Тилли')
+        updated = await service.register_player(-100, 8, 'Ада')
+
+        await database.close()
+        return campaign, master_registration, first, updated
+
+    campaign, master_registration, first, updated = asyncio.run(scenario())
+    assert campaign.master_user_id == 7
+    assert master_registration.status is PlayerRegistrationStatus.MASTER_CONFLICT
+    assert master_registration.character is None
+    assert first.character is not None
+    assert updated.character is not None
+    assert updated.character.id == first.character.id
+    assert updated.character.name == 'Ада'
+
+
+def test_session_service_schedules_and_replaces_announcement(tmp_path):
+    async def scenario():
+        database = await open_database(tmp_path, 'schedule-service.sqlite3')
+        service = SessionService(database)
+        scheduled_at = datetime(2026, 7, 20, 16, tzinfo=UTC)
+
+        missing = await service.get_planned(-100)
+        first = await service.schedule(-100, 'Campaign', scheduled_at, 'https://first.example')
+        await service.set_announcement(first.session.id, 42)
+        moved = await service.schedule(
+            -100,
+            'Campaign',
+            datetime(2026, 7, 21, 17, tzinfo=UTC),
+            'https://second.example',
+        )
+        planned = await service.get_planned(-100)
+
+        await database.close()
+        return missing, first, moved, planned
+
+    missing, first, moved, planned = asyncio.run(scenario())
+    assert missing is None
+    assert first.previous_message_id is None
+    assert moved.session.id == first.session.id
+    assert moved.previous_message_id == 42
+    assert planned == moved.session
+
+
+def test_session_service_stores_default_url(tmp_path):
+    async def scenario():
+        database = await open_database(tmp_path, 'config-service.sqlite3')
+        service = SessionService(database)
+        before = await service.get_default_url(-100)
+        await service.set_default_url(
+            -100, 'https://foundry.example', datetime(2026, 7, 15, 12, tzinfo=UTC)
+        )
+        after = await service.get_default_url(-100)
+        await database.close()
+        return before, after
+
+    assert asyncio.run(scenario()) == (None, 'https://foundry.example')
+
+
+def test_session_service_validates_master_and_lifecycle(tmp_path):
+    async def scenario():
+        database = await open_database(tmp_path, 'lifecycle-service.sqlite3')
+        campaigns = CampaignService(database)
+        sessions = SessionService(database)
+
+        forbidden_start = await sessions.start(-100, 8, None)
+        forbidden_stop = await sessions.stop(-100, 8)
+        await campaigns.assign_master(-100, 7, 'Campaign')
+        empty_stop = await sessions.stop(-100, 7)
+        planned = await sessions.schedule(
+            -100,
+            'Campaign',
+            datetime(2026, 7, 20, 16, tzinfo=UTC),
+            'https://foundry.example',
+        )
+        await sessions.set_announcement(planned.session.id, 99)
+
+        starts = await asyncio.gather(
+            sessions.start(-100, 7, 'Башня'),
+            sessions.start(-100, 7, 'Дубль'),
+        )
+        active = await SessionRepository(database).get_active(planned.session.campaign_id)
+        stopped = await sessions.stop(-100, 7)
+        second_stop = await sessions.stop(-100, 7)
+
+        await database.close()
+        return forbidden_start, forbidden_stop, empty_stop, starts, active, stopped, second_stop
+
+    forbidden_start, forbidden_stop, empty_stop, starts, active, stopped, second_stop = asyncio.run(
+        scenario()
+    )
+    assert forbidden_start.status is SessionStartStatus.FORBIDDEN
+    assert forbidden_stop.status is SessionStopStatus.FORBIDDEN
+    assert empty_stop.status is SessionStopStatus.NO_ACTIVE_SESSION
+    assert sum(result.session is not None for result in starts) == 1
+    assert sum(result.status is SessionStartStatus.ALREADY_ACTIVE for result in starts) == 1
+    successful = next(result for result in starts if result.session is not None)
+    assert successful.announcement_message_id == 99
+    assert active is not None
+    assert stopped.session is not None
+    assert stopped.session.finished_at is not None
+    assert second_stop.status is SessionStopStatus.NO_ACTIVE_SESSION
+
+
+def test_session_start_is_safe_across_database_connections(tmp_path):
+    async def scenario():
+        path = tmp_path / 'concurrent-service.sqlite3'
+        first_database = await SQLiteDatabase.connect(str(path))
+        await apply_migrations(first_database, MIGRATIONS)
+        second_database = await SQLiteDatabase.connect(str(path))
+        await CampaignService(first_database).assign_master(-100, 7, 'Campaign')
+
+        results = await asyncio.gather(
+            SessionService(first_database).start(-100, 7, 'First'),
+            SessionService(second_database).start(-100, 7, 'Second'),
+        )
+        rows = await first_database.fetch_all(
+            'SELECT * FROM sessions WHERE started_at IS NOT NULL AND finished_at IS NULL'
+        )
+        await first_database.close()
+        await second_database.close()
+        return results, rows
+
+    results, rows = asyncio.run(scenario())
+    assert {result.status for result in results} == {
+        SessionStartStatus.STARTED,
+        SessionStartStatus.ALREADY_ACTIVE,
+    }
+    assert len(rows) == 1

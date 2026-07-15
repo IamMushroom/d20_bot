@@ -1,5 +1,4 @@
 import asyncio
-import sqlite3
 from datetime import datetime
 from pathlib import Path
 
@@ -7,6 +6,7 @@ import pytest
 
 from database import SQLiteDatabase, apply_migrations, create_database
 from database.repositories import (
+    ActiveSessionExistsError,
     CampaignRepository,
     CharacterRepository,
     RecapRepository,
@@ -188,7 +188,7 @@ def test_only_one_active_session_is_allowed(tmp_path):
         finally:
             await database.close()
 
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(ActiveSessionExistsError):
         asyncio.run(scenario())
 
 

@@ -25,11 +25,15 @@ migrations/
 └── 005_campaign_master.sql
 ```
 
-Telegram-команды не должны выполнять SQL напрямую. Ожидаемый поток зависимостей:
+Telegram-команды не должны выполнять SQL или собирать бизнес-сценарии
+напрямую. Ожидаемый поток зависимостей:
 
 ```text
-Telegram command → service/repository → Database → SQLite
+Telegram command → service → repository → Database → SQLite
 ```
+
+Сервисы проверяют роли и координируют несколько репозиториев. Репозитории
+отвечают только за хранение и преобразование строк в модели.
 
 ## Конфигурация
 
@@ -109,16 +113,17 @@ PRAGMA journal_mode = WAL;
 2. Создаётся подключение.
 3. Применяются миграции.
 4. Подключение сохраняется в `application.bot_data['database']`.
-5. Регистрируются команды бота.
+5. Создаются единые для приложения `CampaignService` и `SessionService`.
+6. Регистрируются команды бота.
 
 Если миграция завершается ошибкой, подключение закрывается, а запуск приложения прекращается. При штатной остановке `shutdown_application()` извлекает базу из `bot_data` и закрывает её.
 
-Получение базы из обработчика команды:
+Обработчики получают готовый сервис через helper, а не создают его на каждый update:
 
 ```python
-from database import Database
+from commands.helpers import session_service
 
-database: Database = context.application.bot_data['database']
+service = session_service(context)
 ```
 
 ## Миграции
@@ -240,7 +245,9 @@ await sessions.finish(session.id)
 - `get_latest()` получает последнюю сессию независимо от её состояния.
 - `list()` возвращает сессии в порядке номеров.
 
-Попытка открыть вторую active-сессию приводит к `sqlite3.IntegrityError`. Пользовательский слой должен преобразовать её в понятный ответ Telegram.
+Попытка открыть вторую active-сессию преобразуется репозиторием из
+`sqlite3.IntegrityError` в `ActiveSessionExistsError`. Сервис возвращает типизированный статус
+`SessionStartStatus.ALREADY_ACTIVE`, поэтом SQLite-исключение не протекает в Telegram-слой.
 
 Миграция `004_unify_schedules_and_sessions.sql` переносит строки старой таблицы
 `game_schedules` в planned-сессии, сохраняя дату, Foundry URL и Telegram message ID,

@@ -7,20 +7,30 @@ from unittest.mock import AsyncMock
 from telegram.error import BadRequest
 
 import commands
-from commands.game_commands import _parse_date, _valid_url
+from commands.game_utils import parse_game_date, valid_url
+from commands.helpers import CAMPAIGN_SERVICE_KEY, DATABASE_KEY, SESSION_SERVICE_KEY
 from database import SQLiteDatabase, apply_migrations
+from services import CampaignService, SessionService
 
 MIGRATIONS = Path(__file__).resolve().parent.parent / 'migrations'
+
+
+def bot_data(database):
+    return {
+        DATABASE_KEY: database,
+        CAMPAIGN_SERVICE_KEY: CampaignService(database),
+        SESSION_SERVICE_KEY: SessionService(database),
+    }
 
 
 def test_parse_date_supports_full_and_short_dates(monkeypatch):
     monkeypatch.setenv('GAME_TIMEZONE', 'UTC')
     now = datetime(2026, 7, 15, 12, tzinfo=UTC)
-    assert _parse_date('20.07.2026', '19:00', now) == datetime(2026, 7, 20, 19, tzinfo=UTC)
-    assert _parse_date('10.07', '19:00', now) == datetime(2027, 7, 10, 19, tzinfo=UTC)
-    assert _parse_date('20.07.', '19:30', now) == datetime(2026, 7, 20, 19, 30, tzinfo=UTC)
-    assert _valid_url('https://foundry.example/game')
-    assert not _valid_url('foundry.example')
+    assert parse_game_date('20.07.2026', '19:00', now) == datetime(2026, 7, 20, 19, tzinfo=UTC)
+    assert parse_game_date('10.07', '19:00', now) == datetime(2027, 7, 10, 19, tzinfo=UTC)
+    assert parse_game_date('20.07.', '19:30', now) == datetime(2026, 7, 20, 19, 30, tzinfo=UTC)
+    assert valid_url('https://foundry.example/game')
+    assert not valid_url('foundry.example')
 
 
 def test_game_schedule_lifecycle(tmp_path, monkeypatch):
@@ -40,7 +50,7 @@ def test_game_schedule_lifecycle(tmp_path, monkeypatch):
         context = SimpleNamespace(
             args=['20.07.2026', '19:00'],
             bot=bot,
-            application=SimpleNamespace(bot_data={'database': database}),
+            application=SimpleNamespace(bot_data=bot_data(database)),
         )
         update = SimpleNamespace(
             effective_chat=SimpleNamespace(id=-100, type='supergroup'),
@@ -71,7 +81,7 @@ def test_game_rejects_non_admin_and_invalid_input(tmp_path):
             unpin_chat_message=AsyncMock(),
         )
         context = SimpleNamespace(
-            args=['bad'], bot=bot, application=SimpleNamespace(bot_data={'database': database})
+            args=['bad'], bot=bot, application=SimpleNamespace(bot_data=bot_data(database))
         )
         update = SimpleNamespace(
             effective_chat=SimpleNamespace(id=-1, type='group'),
@@ -104,7 +114,7 @@ def test_game_requires_default_or_explicit_foundry_url(tmp_path, monkeypatch):
         context = SimpleNamespace(
             args=['20.07.2026', '19:00'],
             bot=bot,
-            application=SimpleNamespace(bot_data={'database': database}),
+            application=SimpleNamespace(bot_data=bot_data(database)),
         )
         update = SimpleNamespace(
             effective_chat=SimpleNamespace(id=1, type='private'),
@@ -133,7 +143,7 @@ def test_game_reports_pin_failure_in_private_chat(tmp_path):
         context = SimpleNamespace(
             args=['20.07.2026', '19:00', 'https://foundry.example'],
             bot=bot,
-            application=SimpleNamespace(bot_data={'database': database}),
+            application=SimpleNamespace(bot_data=bot_data(database)),
         )
         update = SimpleNamespace(
             effective_chat=SimpleNamespace(id=1, type='private'),
@@ -164,7 +174,7 @@ def test_game_url_sets_and_supplies_chat_default(tmp_path, monkeypatch):
         context = SimpleNamespace(
             args=['https://foundry.example/chat'],
             bot=bot,
-            application=SimpleNamespace(bot_data={'database': database}),
+            application=SimpleNamespace(bot_data=bot_data(database)),
         )
         update = SimpleNamespace(
             effective_chat=SimpleNamespace(id=10, type='private'),
@@ -203,7 +213,7 @@ def test_game_command_reschedules_existing_session_and_replaces_pin(tmp_path, mo
         context = SimpleNamespace(
             args=['01.01.2027', '18:00'],
             bot=bot,
-            application=SimpleNamespace(bot_data={'database': database}),
+            application=SimpleNamespace(bot_data=bot_data(database)),
         )
         update = SimpleNamespace(
             effective_chat=SimpleNamespace(id=20, type='private'),
@@ -239,7 +249,7 @@ def test_game_url_rejects_non_admin_and_invalid_url(tmp_path):
         context = SimpleNamespace(
             args=['https://foundry.example'],
             bot=bot,
-            application=SimpleNamespace(bot_data={'database': database}),
+            application=SimpleNamespace(bot_data=bot_data(database)),
         )
         update = SimpleNamespace(
             effective_chat=SimpleNamespace(id=-10, type='group'),

@@ -88,11 +88,15 @@ def test_initialize_and_shutdown_application(monkeypatch, tmp_path):
     apply_migrations.assert_awaited_once_with(database, tmp_path)
     set_bot_commands.assert_awaited_once_with(application)
     assert application.bot_data[run.DATABASE_KEY] is database
+    assert run.CAMPAIGN_SERVICE_KEY in application.bot_data
+    assert run.SESSION_SERVICE_KEY in application.bot_data
 
     asyncio.run(run.shutdown_application(application))
 
     database.close.assert_awaited_once_with()
     assert run.DATABASE_KEY not in application.bot_data
+    assert run.CAMPAIGN_SERVICE_KEY not in application.bot_data
+    assert run.SESSION_SERVICE_KEY not in application.bot_data
 
 
 def test_initialize_application_closes_database_after_migration_error(monkeypatch):

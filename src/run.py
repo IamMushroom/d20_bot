@@ -8,9 +8,10 @@ from telegram.ext import ApplicationBuilder, CommandHandler, filters
 
 import commands
 import log_format
+from commands.helpers import CAMPAIGN_SERVICE_KEY, DATABASE_KEY, SESSION_SERVICE_KEY
 from database import apply_migrations, create_database
+from services import CampaignService, SessionService
 
-DATABASE_KEY = 'database'
 MIGRATIONS_DIRECTORY = Path(__file__).resolve().parent.parent / 'migrations'
 
 
@@ -30,10 +31,14 @@ async def initialize_application(application) -> None:
         await database.close()
         raise
     application.bot_data[DATABASE_KEY] = database
+    application.bot_data[CAMPAIGN_SERVICE_KEY] = CampaignService(database)
+    application.bot_data[SESSION_SERVICE_KEY] = SessionService(database)
     await set_bot_commands(application)
 
 
 async def shutdown_application(application) -> None:
+    application.bot_data.pop(CAMPAIGN_SERVICE_KEY, None)
+    application.bot_data.pop(SESSION_SERVICE_KEY, None)
     database = application.bot_data.pop(DATABASE_KEY, None)
     if database is not None:
         await database.close()
