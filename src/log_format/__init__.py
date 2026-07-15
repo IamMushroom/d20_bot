@@ -18,6 +18,7 @@ EXTRA_FIELDS = (
     'error_type',
     'error_message',
     'tag',
+    'backup_path',
 )
 LOG_CONTEXT: ContextVar[dict | None] = ContextVar('log_context', default=None)
 

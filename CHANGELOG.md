@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-07-16
+
 ### Added
 
 - SQLite-модуль с миграциями, репозиториями и постоянным Docker volume.
@@ -32,6 +34,9 @@
 - Постоянный SQLite-outbox для доставки событий веб-панели Telegram-боту.
 - Helm chart для standalone и connected-развёртывания в Kubernetes.
 - Единый префикс `D20_BOT_` для переменных окружения приложения и deploy-конфигурации.
+- Health endpoint Core и readiness-проверка всех Compose-сервисов при deploy.
+- Автоматический согласованный backup production SQLite в отдельный Docker volume перед
+  миграциями с настраиваемой ротацией копий.
 
 ### Fixed
 
@@ -40,6 +45,8 @@
 - Дублирование данных между `game_schedules` и `sessions`: расписание перенесено в сессии.
 - Диагностика ошибок Telegram API при установке member tags в структурированных логах.
 - Понятный ответ на Core-команды, вызванные в standalone-режиме.
+- Подготовка прав SQLite volume вынесена в одноразовый инфраструктурный сервис `data-init`.
+- Фоновый Core poller корректно управляется lifecycle бота и пишет причину транспортной ошибки.
 
 ### Removed
 

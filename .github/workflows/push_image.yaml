@@ -165,6 +165,16 @@ jobs:
           docker compose -p d20_bot_prd config --quiet
           docker compose -p d20_bot_prd pull d20
 
+      - name: Back up production database
+        env:
+          D20_BOT_DOCKER_TAG: ${{ needs.build-and-push.outputs.release_tag }}
+          D20_BOT_TG_TOKEN: ${{ secrets.TG_TOKEN }}
+        run: >-
+          docker compose
+          -p d20_bot_prd
+          --profile maintenance
+          run --rm --no-deps database-backup
+
       - name: Deploy release image
         env:
           D20_BOT_DOCKER_TAG: ${{ needs.build-and-push.outputs.release_tag }}

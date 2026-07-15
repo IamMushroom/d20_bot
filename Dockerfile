@@ -27,8 +27,8 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev \
     && addgroup -S -g 10001 bot \
     && adduser -S -D -H -u 10001 -G bot bot \
-    && mkdir -p /data \
-    && chown bot:bot /data
+    && mkdir -p /data /backups \
+    && chown bot:bot /data /backups
 
 COPY --chown=bot:bot src ./src
 COPY --chown=bot:bot migrations ./migrations

@@ -18,6 +18,25 @@ services:
     labels:
       io.d20-bot.verify: oneshot
 
+  database-backup:
+    image: immushroom/d20_bot:${D20_BOT_DOCKER_TAG:-latest}
+    profiles: [maintenance]
+    command: [.venv/bin/python, src/backup_database.py]
+    environment:
+      D20_BOT_LOG_FORMAT: ${D20_BOT_LOG_FORMAT:-json}
+      D20_BOT_BACKUP_KEEP: ${D20_BOT_BACKUP_KEEP:-10}
+    volumes:
+      - d20-data:/data:ro
+      - d20-backups:/backups
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: "no"
+
   d20:
     image: immushroom/d20_bot:${D20_BOT_DOCKER_TAG:-latest}
     build: .
@@ -126,3 +145,4 @@ services:
 
 volumes:
   d20-data:
+  d20-backups:
