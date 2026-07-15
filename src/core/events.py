@@ -52,8 +52,14 @@ async def poll_events(application) -> None:
         try:
             for event in await client.get_events():
                 await process_event(application.bot, client, event)
-        except CoreClientError:
-            logging.warning('Could not poll Core events')
+        except CoreClientError as error:
+            logging.warning(
+                'Could not poll Core events',
+                extra={
+                    'error_type': type(error).__name__,
+                    'error_message': str(error),
+                },
+            )
         except Exception:
             logging.exception('Could not process Core event')
         await asyncio.sleep(2)

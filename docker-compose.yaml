@@ -1,4 +1,23 @@
 services:
+  data-init:
+    image: immushroom/d20_bot:${D20_BOT_DOCKER_TAG:-latest}
+    build: .
+    profiles: [platform]
+    user: root
+    command: [chown, -R, "10001:10001", /data]
+    volumes:
+      - d20-data:/data
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+    restart: "no"
+    labels:
+      io.d20-bot.verify: oneshot
+
   d20:
     image: immushroom/d20_bot:${D20_BOT_DOCKER_TAG:-latest}
     build: .
@@ -36,6 +55,9 @@ services:
     build: .
     profiles: [platform]
     command: [.venv/bin/python, src/run_core.py]
+    depends_on:
+      data-init:
+        condition: service_completed_successfully
     init: true
     read_only: true
     environment:

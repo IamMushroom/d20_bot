@@ -93,7 +93,6 @@ def test_standalone_lifecycle_does_not_open_database(monkeypatch):
 
 def test_connected_lifecycle_creates_core_client_without_database(monkeypatch):
     application = SimpleNamespace(bot_data={}, bot=AsyncMock())
-    application.create_task = lambda coroutine, **_kwargs: asyncio.create_task(coroutine)
     client = object()
     set_bot_commands = AsyncMock()
     monkeypatch.setattr(run, 'runtime_mode', lambda: 'connected')

@@ -206,7 +206,7 @@ class CoreClient:
         except HTTPError as error:
             raise CoreClientError(f'Core returned HTTP {error.code}') from error
         except (URLError, TimeoutError, json.JSONDecodeError) as error:
-            raise CoreClientError('Core is unavailable') from error
+            raise CoreClientError(f'Core is unavailable: {error}') from error
         if not isinstance(payload, dict):
             raise CoreClientError('Core returned an invalid response')
         return payload

@@ -151,6 +151,7 @@ jobs:
     env:
       COMPOSE_PROFILES: ${{ vars.D20_MODE == 'connected' && 'platform' || '' }}
       D20_BOT_MODE: ${{ vars.D20_MODE }}
+      D20_BOT_CORE_TOKEN: ${{ secrets.CORE_TOKEN }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -182,7 +183,13 @@ jobs:
           for ATTEMPT in {1..12}; do
             FAILED=0
             while IFS= read -r SERVICE; do
-              CONTAINER_ID=$(docker compose -p d20_bot_prd ps -q "$SERVICE")
+              CONTAINER_ID=$(docker compose -p d20_bot_prd ps -aq "$SERVICE")
+              ONESHOT=$(docker inspect --format '{{index .Config.Labels "io.d20-bot.verify"}}' "$CONTAINER_ID" 2>/dev/null || true)
+              if [[ "$ONESHOT" == "oneshot" ]]; then
+                EXIT_CODE=$(docker inspect --format '{{.State.ExitCode}}' "$CONTAINER_ID" 2>/dev/null || true)
+                [[ "$EXIT_CODE" == "0" ]] || FAILED=1
+                continue
+              fi
               RUNNING=$(docker inspect --format '{{.State.Running}}' "$CONTAINER_ID" 2>/dev/null || true)
               RESTARTING=$(docker inspect --format '{{.State.Restarting}}' "$CONTAINER_ID" 2>/dev/null || true)
               HEALTH=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$CONTAINER_ID" 2>/dev/null || true)

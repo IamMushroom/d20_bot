@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from os import getenv
 
@@ -34,7 +35,7 @@ async def initialize_application(application) -> None:
         application.bot_data[CORE_CLIENT_KEY] = CoreClient(
             required_environment('D20_BOT_CORE_URL'), required_environment('D20_BOT_CORE_TOKEN')
         )
-        application.bot_data[EVENT_POLLER_KEY] = application.create_task(
+        application.bot_data[EVENT_POLLER_KEY] = asyncio.create_task(
             poll_events(application), name='core-event-poller'
         )
         await set_bot_commands(application)
