@@ -9,10 +9,14 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if chat is None or message is None:
         return
 
-    from commands.registry import HELP_MESSAGE
+    from commands.registry import help_message
+
+    bot_data = getattr(context.application, 'bot_data', {})
+    platform_enabled = bot_data.get('platform_enabled', True)
+    core_connected = bot_data.get('core_connected', False)
 
     await context.bot.send_message(
         chat_id=chat.id,
-        text=HELP_MESSAGE,
+        text=help_message(platform_enabled=platform_enabled, core_connected=core_connected),
         reply_to_message_id=message.id,
     )

@@ -17,6 +17,12 @@ class PlayerRegistration:
     character: Character | None
 
 
+@dataclass(frozen=True, slots=True)
+class CampaignRoster:
+    campaign: Campaign
+    characters: tuple[Character, ...]
+
+
 class CampaignService:
     def __init__(self, database: Database):
         self._campaigns = CampaignRepository(database)
@@ -28,6 +34,13 @@ class CampaignService:
     async def is_master(self, chat_id: int, user_id: int) -> bool:
         campaign = await self._campaigns.get_by_chat_id(chat_id)
         return campaign is not None and campaign.master_user_id == user_id
+
+    async def get_roster(self, chat_id: int) -> CampaignRoster | None:
+        campaign = await self._campaigns.get_by_chat_id(chat_id)
+        if campaign is None:
+            return None
+        characters = await self._characters.list(campaign.id)
+        return CampaignRoster(campaign, tuple(characters))
 
     async def register_player(
         self, chat_id: int, user_id: int, name: str, title: str | None = None

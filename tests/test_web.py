@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 from pathlib import Path
@@ -7,8 +8,15 @@ from unittest.mock import AsyncMock
 
 from telegram.error import BadRequest
 
-from commands.admin_commands import ADMIN_ACCESS_KEY, WEB_BASE_URL_KEY, admin, web_url
+from commands.admin_commands import (
+    ADMIN_ACCESS_KEY,
+    CORE_CLIENT_KEY,
+    WEB_BASE_URL_KEY,
+    admin,
+    web_url,
+)
 from commands.helpers import CAMPAIGN_SERVICE_KEY, SESSION_SERVICE_KEY
+from core import CoreClientError
 from database import SQLiteDatabase, apply_migrations
 from services import CampaignService, SessionService
 from web import AdminAccessService, AdminWebServer
@@ -121,6 +129,44 @@ def test_admin_command_reports_private_message_failure(tmp_path):
     assert 'личные сообщения' in asyncio.run(scenario())
 
 
+def test_admin_command_uses_connected_core_client():
+    client = SimpleNamespace(create_admin_link=AsyncMock(return_value='https://d20.example/login'))
+    bot = SimpleNamespace(send_message=AsyncMock())
+    context = SimpleNamespace(
+        application=SimpleNamespace(bot_data={CORE_CLIENT_KEY: client}), bot=bot
+    )
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=-100, title='Campaign'),
+        effective_message=SimpleNamespace(id=10),
+        effective_user=SimpleNamespace(id=7),
+    )
+
+    asyncio.run(admin(update, context))
+
+    client.create_admin_link.assert_awaited_once_with(-100, 7, 'Campaign')
+    assert bot.send_message.await_args.kwargs['chat_id'] == 7
+
+
+def test_admin_command_reports_connected_core_error():
+    client = SimpleNamespace(
+        create_admin_link=AsyncMock(side_effect=CoreClientError('unavailable'))
+    )
+    bot = SimpleNamespace(send_message=AsyncMock())
+    context = SimpleNamespace(
+        application=SimpleNamespace(bot_data={CORE_CLIENT_KEY: client}), bot=bot
+    )
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=-100, title=None),
+        effective_message=SimpleNamespace(id=10),
+        effective_user=SimpleNamespace(id=7),
+    )
+
+    asyncio.run(admin(update, context))
+
+    assert bot.send_message.await_args.kwargs['chat_id'] == -100
+    assert 'Core недоступен' in bot.send_message.await_args.kwargs['text']
+
+
 def test_web_url_command_sets_chat_address(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
@@ -172,7 +218,8 @@ def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
 
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
-        server = AdminWebServer(access, sessions, bot)
+        server = AdminWebServer(access, campaigns, sessions, bot)
+        await campaigns.register_player(-100, 8, '<Tilly>')
         identity = AdminIdentity(-100, 7, 'Campaign')
         token = access.create_login(identity)
 
@@ -227,6 +274,7 @@ def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
     assert 'Secure' in results[2][1]['Set-Cookie']
     assert results[3][0] is HTTPStatus.UNAUTHORIZED
     assert results[4][0] is HTTPStatus.OK
+    assert b'&lt;Tilly&gt;' in results[4][2]
     assert results[5][0] is HTTPStatus.BAD_REQUEST
     assert results[6][0] is HTTPStatus.BAD_REQUEST
     assert results[7][0] is HTTPStatus.SEE_OTHER
@@ -236,10 +284,47 @@ def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
     results[11].pin_chat_message.assert_awaited_once()
 
 
+def test_internal_api_issues_admin_link_for_master(tmp_path):
+    async def scenario():
+        database, campaigns, sessions, access, bot = await setup(tmp_path)
+        server = AdminWebServer(
+            access,
+            campaigns,
+            sessions,
+            bot,
+            internal_token='core-secret',
+            web_base_url='https://d20.example',
+        )
+        unauthorized = await server._route('POST', '/api/admin-link', {}, b'chat_id=-100&user_id=7')
+        headers = {'authorization': 'Bearer core-secret'}
+        invalid = await server._route('POST', '/api/admin-link', headers, b'chat_id=nope')
+        forbidden = await server._route(
+            'POST', '/api/admin-link', headers, b'chat_id=-100&user_id=8'
+        )
+        allowed = await server._route(
+            'POST',
+            '/api/admin-link',
+            headers,
+            'chat_id=-100&user_id=7&chat_title=Кампания'.encode(),
+        )
+        url = json.loads(allowed[2])['url']
+        login = await server._route('GET', url.removeprefix('https://d20.example'), {}, b'')
+        await database.close()
+        return unauthorized, invalid, forbidden, allowed, login
+
+    unauthorized, invalid, forbidden, allowed, login = asyncio.run(scenario())
+    assert unauthorized[0] is HTTPStatus.UNAUTHORIZED
+    assert invalid[0] is HTTPStatus.BAD_REQUEST
+    assert forbidden[0] is HTTPStatus.FORBIDDEN
+    assert allowed[0] is HTTPStatus.OK
+    assert allowed[1]['Content-Type'].startswith('application/json')
+    assert login[0] is HTTPStatus.SEE_OTHER
+
+
 def test_web_server_start_read_request_and_close(tmp_path):
     async def scenario():
-        database, _campaigns, sessions, access, bot = await setup(tmp_path)
-        server = AdminWebServer(access, sessions, bot)
+        database, campaigns, sessions, access, bot = await setup(tmp_path)
+        server = AdminWebServer(access, campaigns, sessions, bot)
         reader = asyncio.StreamReader()
         reader.feed_data(b'POST /schedule HTTP/1.1\r\nContent-Length: 3\r\n\r\na=1')
         reader.feed_eof()
@@ -258,7 +343,7 @@ def test_web_server_start_read_request_and_close(tmp_path):
 def test_web_session_lifecycle(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
-        server = AdminWebServer(access, sessions, bot)
+        server = AdminWebServer(access, campaigns, sessions, bot)
         identity = AdminIdentity(-100, 7, 'Campaign')
         token = access.create_login(identity)
         login = await server._route('GET', f'/login?token={token}', {}, b'')
@@ -334,8 +419,8 @@ def test_web_server_handles_http_response(tmp_path):
             pass
 
     async def scenario():
-        database, _campaigns, sessions, access, bot = await setup(tmp_path)
-        server = AdminWebServer(access, sessions, bot)
+        database, campaigns, sessions, access, bot = await setup(tmp_path)
+        server = AdminWebServer(access, campaigns, sessions, bot)
         reader = asyncio.StreamReader()
         reader.feed_data(b'GET / HTTP/1.1\r\nHost: localhost\r\n\r\n')
         reader.feed_eof()

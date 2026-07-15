@@ -1,4 +1,9 @@
-from services.campaigns import CampaignService, PlayerRegistration, PlayerRegistrationStatus
+from services.campaigns import (
+    CampaignRoster,
+    CampaignService,
+    PlayerRegistration,
+    PlayerRegistrationStatus,
+)
 from services.sessions import (
     ScheduleUpdate,
     SessionService,
@@ -9,6 +14,7 @@ from services.sessions import (
 )
 
 __all__ = [
+    'CampaignRoster',
     'CampaignService',
     'PlayerRegistration',
     'PlayerRegistrationStatus',

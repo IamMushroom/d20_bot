@@ -28,8 +28,46 @@ def test_set_bot_commands_uses_registry():
 
     registered = application.bot.set_my_commands.await_args.args[0]
     assert [command.command for command in registered] == [
-        command.name for command in commands.COMMANDS
+        command.name for command in commands.MENU_COMMANDS
     ]
     assert [command.description for command in registered] == [
-        command.menu_description for command in commands.COMMANDS
+        command.menu_description for command in commands.MENU_COMMANDS
     ]
+
+
+def test_only_basic_rolls_are_shown_in_quick_menu():
+    assert [command.name for command in commands.MENU_COMMANDS] == [
+        'roll',
+        'roll20',
+        'duality',
+    ]
+
+
+def test_standalone_registry_excludes_platform_commands():
+    standalone = commands.commands_for(platform_enabled=False)
+    assert {command.name for command in standalone} == {
+        'roll',
+        'roll20',
+        'duality',
+        'timer',
+        'help',
+        'version',
+    }
+    assert '/admin' not in commands.BASIC_HELP_MESSAGE
+    assert '/admin' in commands.HELP_MESSAGE
+
+
+def test_connected_registry_only_adds_remote_commands():
+    connected = commands.commands_for(platform_enabled=False, core_connected=True)
+
+    assert {command.name for command in connected} == {
+        'roll',
+        'roll20',
+        'duality',
+        'timer',
+        'help',
+        'version',
+        'admin',
+    }
+    assert '/admin' in commands.help_message(platform_enabled=False, core_connected=True)
+    assert '/game' not in commands.help_message(platform_enabled=False, core_connected=True)

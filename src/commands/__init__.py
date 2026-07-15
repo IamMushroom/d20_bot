@@ -8,7 +8,14 @@ from commands.game_config_commands import game_url
 from commands.game_schedule_commands import game
 from commands.help_commands import help_command
 from commands.observability import observed_callback
-from commands.registry import COMMANDS, HELP_MESSAGE
+from commands.registry import (
+    BASIC_HELP_MESSAGE,
+    COMMANDS,
+    HELP_MESSAGE,
+    MENU_COMMANDS,
+    commands_for,
+    help_message,
+)
 from commands.role_commands import master, player
 from commands.roll_commands import roll, roll20, rolld20
 from commands.session_commands import session_start, session_stop
@@ -26,6 +33,8 @@ __all__ = (
     'player',
     'HELP_MESSAGE',
     'COMMANDS',
+    'BASIC_HELP_MESSAGE',
+    'MENU_COMMANDS',
     'observed_callback',
     'help_command',
     'roll',
@@ -36,4 +45,6 @@ __all__ = (
     'timer',
     'version_command',
     'web_url',
+    'commands_for',
+    'help_message',
 )

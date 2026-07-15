@@ -17,7 +17,10 @@ def test_main_registers_all_handlers(monkeypatch):
     post_init_builder.post_shutdown.return_value.build.return_value = application
     application_builder = Mock(return_value=builder)
     monkeypatch.setattr(run, 'ApplicationBuilder', application_builder)
-    monkeypatch.setattr(run, 'getenv', lambda name: 'token' if name == 'TG_TOKEN' else None)
+    monkeypatch.setattr(
+        run, 'getenv', lambda name, default='': 'token' if name == 'TG_TOKEN' else default
+    )
+    monkeypatch.setattr(run, 'runtime_mode', lambda: 'standalone')
 
     run.main()
 
@@ -27,14 +30,16 @@ def test_main_registers_all_handlers(monkeypatch):
         run.initialize_application
     )
     post_init_builder.post_shutdown.assert_called_once_with(run.shutdown_application)
-    expected_handlers = sum(1 + len(command.aliases) for command in commands.COMMANDS)
+    expected_handlers = sum(
+        1 + len(command.aliases) for command in commands.commands_for(platform_enabled=False)
+    )
     assert application.add_handler.call_count == expected_handlers
     application.add_error_handler.assert_called_once_with(commands.handle_error)
     application.run_polling.assert_called_once_with()
 
 
 def test_main_rejects_missing_token(monkeypatch):
-    monkeypatch.setattr(run, 'getenv', lambda _name: None)
+    monkeypatch.setattr(run, 'getenv', lambda _name, default='': default)
 
     with pytest.raises(RuntimeError, match='TG_TOKEN environment variable is not set'):
         run.main()
@@ -71,98 +76,122 @@ def test_bootstrap_configures_environment_and_starts_bot(monkeypatch):
 
 
 def test_initialize_and_shutdown_application(monkeypatch, tmp_path):
-    database = AsyncMock()
-    create_database = AsyncMock(return_value=database)
-    apply_migrations = AsyncMock()
+    runtime = SimpleNamespace(
+        database=object(),
+        campaigns=object(),
+        sessions=object(),
+        access=object(),
+        web_base_url='https://d20.example',
+        web_server=object(),
+        close=AsyncMock(),
+    )
+    start_core = AsyncMock(return_value=runtime)
     set_bot_commands = AsyncMock()
     application = SimpleNamespace(bot_data={}, bot=AsyncMock())
-    monkeypatch.setattr(
-        run,
-        'getenv',
-        lambda name, default=None: 'sqlite:///:memory:' if name == 'DATABASE_URL' else default,
-    )
-    monkeypatch.setattr(run, 'create_database', create_database)
-    monkeypatch.setattr(run, 'apply_migrations', apply_migrations)
+    values = {
+        'DATABASE_URL': 'sqlite:///:memory:',
+        'WEB_BASE_URL': 'https://d20.example',
+        'WEB_HOST': '127.0.0.1',
+        'WEB_PORT': '9000',
+    }
+    monkeypatch.setattr(run, 'getenv', lambda name, default=None: values.get(name, default))
+    monkeypatch.setattr(run.CoreRuntime, 'start', start_core)
     monkeypatch.setattr(run, 'set_bot_commands', set_bot_commands)
-    server = SimpleNamespace(start=AsyncMock(), close=AsyncMock())
-    monkeypatch.setattr(run, 'AdminWebServer', Mock(return_value=server))
     monkeypatch.setattr(run, 'MIGRATIONS_DIRECTORY', tmp_path)
+    monkeypatch.setattr(run, 'runtime_mode', lambda: 'full')
 
     asyncio.run(run.initialize_application(application))
 
-    create_database.assert_awaited_once_with('sqlite:///:memory:')
-    apply_migrations.assert_awaited_once_with(database, tmp_path)
+    start_core.assert_awaited_once_with(
+        database_url='sqlite:///:memory:',
+        migrations_directory=tmp_path,
+        web_host='127.0.0.1',
+        web_port=9000,
+        web_base_url='https://d20.example',
+        internal_token='',
+        telegram_bot=application.bot,
+    )
     set_bot_commands.assert_awaited_once_with(application)
-    assert application.bot_data[run.DATABASE_KEY] is database
-    assert run.CAMPAIGN_SERVICE_KEY in application.bot_data
-    assert run.SESSION_SERVICE_KEY in application.bot_data
+    assert application.bot_data[run.DATABASE_KEY] is runtime.database
+    assert application.bot_data[run.CAMPAIGN_SERVICE_KEY] is runtime.campaigns
+    assert application.bot_data[run.SESSION_SERVICE_KEY] is runtime.sessions
 
     asyncio.run(run.shutdown_application(application))
 
-    database.close.assert_awaited_once_with()
-    server.close.assert_awaited_once_with()
+    runtime.close.assert_awaited_once_with()
     assert run.DATABASE_KEY not in application.bot_data
     assert run.CAMPAIGN_SERVICE_KEY not in application.bot_data
     assert run.SESSION_SERVICE_KEY not in application.bot_data
 
 
-def test_initialize_application_closes_database_after_migration_error(monkeypatch):
-    database = AsyncMock()
-    monkeypatch.setattr(run, 'create_database', AsyncMock(return_value=database))
-    monkeypatch.setattr(run, 'apply_migrations', AsyncMock(side_effect=RuntimeError('broken')))
-
-    with pytest.raises(RuntimeError, match='broken'):
-        asyncio.run(run.initialize_application(SimpleNamespace(bot_data={})))
-
-    database.close.assert_awaited_once_with()
-
-
-def test_initialize_and_shutdown_web_server(monkeypatch, tmp_path):
+def test_standalone_lifecycle_does_not_open_database(monkeypatch):
     async def scenario():
-        database = AsyncMock()
-        server = SimpleNamespace(start=AsyncMock(), close=AsyncMock())
-        server_factory = Mock(return_value=server)
-        values = {
-            'DATABASE_URL': 'sqlite:///:memory:',
-            'WEB_BASE_URL': 'https://d20.example',
-            'WEB_HOST': '127.0.0.1',
-            'WEB_PORT': '9000',
-        }
         application = SimpleNamespace(bot_data={}, bot=AsyncMock())
-        monkeypatch.setattr(run, 'getenv', lambda name, default=None: values.get(name, default))
-        monkeypatch.setattr(run, 'create_database', AsyncMock(return_value=database))
-        monkeypatch.setattr(run, 'apply_migrations', AsyncMock())
-        monkeypatch.setattr(run, 'set_bot_commands', AsyncMock())
-        monkeypatch.setattr(run, 'AdminWebServer', server_factory)
-        monkeypatch.setattr(run, 'MIGRATIONS_DIRECTORY', tmp_path)
+        start_core = AsyncMock()
+        set_bot_commands = AsyncMock()
+        monkeypatch.setattr(run, 'runtime_mode', lambda: 'standalone')
+        monkeypatch.setattr(run.CoreRuntime, 'start', start_core)
+        monkeypatch.setattr(run, 'set_bot_commands', set_bot_commands)
 
         await run.initialize_application(application)
+        enabled_during_run = application.bot_data[run.PLATFORM_ENABLED_KEY]
         await run.shutdown_application(application)
-        return database, server, server_factory
+        return application, start_core, set_bot_commands, enabled_during_run
 
-    database, server, server_factory = asyncio.run(scenario())
-    server_factory.assert_called_once()
-    server.start.assert_awaited_once_with('127.0.0.1', 9000)
-    server.close.assert_awaited_once_with()
-    database.close.assert_awaited_once_with()
+    application, start_core, set_bot_commands, enabled = asyncio.run(scenario())
+    assert not enabled
+    start_core.assert_not_awaited()
+    set_bot_commands.assert_awaited_once()
+    assert application.bot_data == {}
 
 
-def test_initialize_application_uses_absolute_container_database_path(monkeypatch, tmp_path):
-    database = AsyncMock()
-    create_database = AsyncMock(return_value=database)
-    monkeypatch.delenv('DATABASE_URL', raising=False)
-    monkeypatch.setattr(run, 'create_database', create_database)
-    monkeypatch.setattr(run, 'apply_migrations', AsyncMock())
-    monkeypatch.setattr(run, 'set_bot_commands', AsyncMock())
-    server = SimpleNamespace(start=AsyncMock(), close=AsyncMock())
-    monkeypatch.setattr(run, 'AdminWebServer', Mock(return_value=server))
-    monkeypatch.setattr(run, 'MIGRATIONS_DIRECTORY', tmp_path)
-
+def test_connected_lifecycle_creates_core_client_without_database(monkeypatch):
     application = SimpleNamespace(bot_data={}, bot=AsyncMock())
+    client = object()
+    start_core = AsyncMock()
+    set_bot_commands = AsyncMock()
+    monkeypatch.setattr(run, 'runtime_mode', lambda: 'connected')
+    monkeypatch.setattr(
+        run,
+        'required_environment',
+        lambda name: {'CORE_URL': 'http://core:8190', 'CORE_TOKEN': 'secret'}[name],
+    )
+    monkeypatch.setattr(run, 'CoreClient', Mock(return_value=client))
+    monkeypatch.setattr(run.CoreRuntime, 'start', start_core)
+    monkeypatch.setattr(run, 'set_bot_commands', set_bot_commands)
+
     asyncio.run(run.initialize_application(application))
 
-    create_database.assert_awaited_once_with('sqlite:////data/d20.sqlite3')
+    run.CoreClient.assert_called_once_with('http://core:8190', 'secret')
+    assert application.bot_data[run.CORE_CLIENT_KEY] is client
+    assert application.bot_data[run.CORE_CONNECTED_KEY]
+    start_core.assert_not_awaited()
     asyncio.run(run.shutdown_application(application))
+    assert application.bot_data == {}
+
+
+def test_platform_mode_defaults_to_standalone_and_validates(monkeypatch):
+    monkeypatch.delenv('D20_MODE', raising=False)
+    assert run.runtime_mode() == 'standalone'
+    assert not run.platform_enabled()
+    monkeypatch.setenv('D20_MODE', 'connected')
+    assert run.runtime_mode() == 'connected'
+    monkeypatch.setenv('D20_MODE', 'full')
+    assert run.platform_enabled()
+    monkeypatch.setenv('D20_MODE', 'invalid')
+    with pytest.raises(ValueError, match='D20_MODE'):
+        run.platform_enabled()
+
+
+def test_initialize_application_clears_state_after_core_error(monkeypatch):
+    monkeypatch.setattr(run.CoreRuntime, 'start', AsyncMock(side_effect=RuntimeError('broken')))
+    monkeypatch.setattr(run, 'runtime_mode', lambda: 'full')
+    application = SimpleNamespace(bot_data={}, bot=AsyncMock())
+
+    with pytest.raises(RuntimeError, match='broken'):
+        asyncio.run(run.initialize_application(application))
+
+    assert application.bot_data == {}
 
 
 def test_shutdown_application_without_database():

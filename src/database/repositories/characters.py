@@ -42,3 +42,10 @@ class CharacterRepository:
             (campaign_id, user_id),
         )
         return _character(row) if row is not None else None
+
+    async def list(self, campaign_id: int) -> list[Character]:
+        rows = await self._database.fetch_all(
+            'SELECT * FROM characters WHERE campaign_id = ? ORDER BY name, id',
+            (campaign_id,),
+        )
+        return [_character(row) for row in rows]

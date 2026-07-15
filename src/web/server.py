@@ -1,6 +1,8 @@
 import asyncio
 import html
+import json
 import logging
+import secrets
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from http import HTTPStatus
@@ -8,17 +10,28 @@ from os import getenv
 from urllib.parse import parse_qs, urlsplit
 
 from commands.game_utils import game_message, game_timezone, valid_url
-from services import SessionService, SessionStartStatus, SessionStopStatus
+from services import CampaignService, SessionService, SessionStartStatus, SessionStopStatus
 from web.access import AdminAccessService, AdminIdentity
 
 MAX_REQUEST_SIZE = 16 * 1024
 
 
 class AdminWebServer:
-    def __init__(self, access: AdminAccessService, sessions: SessionService, bot) -> None:
+    def __init__(
+        self,
+        access: AdminAccessService,
+        campaigns: CampaignService,
+        sessions: SessionService,
+        bot,
+        internal_token: str = '',
+        web_base_url: str = '',
+    ) -> None:
         self._access = access
+        self._campaigns = campaigns
         self._sessions = sessions
         self._bot = bot
+        self._internal_token = internal_token
+        self._web_base_url = web_base_url
         self._server: asyncio.Server | None = None
 
     async def start(self, host: str, port: int) -> None:
@@ -30,6 +43,12 @@ class AdminWebServer:
             self._server.close()
             await self._server.wait_closed()
             self._server = None
+
+    async def serve_forever(self) -> None:
+        if self._server is None:
+            raise RuntimeError('Admin web server is not started')
+        async with self._server:
+            await self._server.serve_forever()
 
     async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
@@ -79,6 +98,8 @@ class AdminWebServer:
         self, method: str, target: str, headers: Mapping[str, str], body: bytes
     ) -> tuple[HTTPStatus, dict[str, str], bytes]:
         url = urlsplit(target)
+        if method == 'POST' and url.path == '/api/admin-link':
+            return await self._admin_link(headers, parse_qs(body.decode()))
         if method == 'GET' and url.path == '/login':
             token = parse_qs(url.query).get('token', [''])[0]
             session_id = self._access.consume_login(token)
@@ -106,9 +127,38 @@ class AdminWebServer:
             return await self._stop_session(identity)
         return self._page(HTTPStatus.NOT_FOUND, 'Страница не найдена.')
 
+    async def _admin_link(
+        self, headers: Mapping[str, str], form: Mapping[str, list[str]]
+    ) -> tuple[HTTPStatus, dict[str, str], bytes]:
+        authorization = headers.get('authorization', '')
+        supplied_token = (
+            authorization.removeprefix('Bearer ') if authorization.startswith('Bearer ') else ''
+        )
+        if not self._internal_token or not secrets.compare_digest(
+            supplied_token, self._internal_token
+        ):
+            return self._json(HTTPStatus.UNAUTHORIZED, {'error': 'unauthorized'})
+        try:
+            chat_id = int(form['chat_id'][0])
+            user_id = int(form['user_id'][0])
+            chat_title = form.get('chat_title', [None])[0] or None
+        except KeyError, ValueError, IndexError:
+            return self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_request'})
+        if not await self._campaigns.is_master(chat_id, user_id):
+            return self._json(HTTPStatus.FORBIDDEN, {'error': 'forbidden'})
+        base_url = await self._sessions.get_web_base_url(chat_id) or self._web_base_url
+        if not base_url:
+            return self._json(HTTPStatus.CONFLICT, {'error': 'web_url_not_configured'})
+        token = self._access.create_login(AdminIdentity(chat_id, user_id, chat_title))
+        return self._json(
+            HTTPStatus.OK,
+            {'url': f'{base_url.rstrip("/")}/login?token={token}'},
+        )
+
     async def _dashboard(self, identity: AdminIdentity) -> tuple[HTTPStatus, dict[str, str], bytes]:
         session = await self._sessions.get_planned(identity.chat_id)
         active = await self._sessions.get_active(identity.chat_id)
+        roster = await self._campaigns.get_roster(identity.chat_id)
         current = (
             html.escape(game_message(session)).replace('\n', '<br>')
             if session
@@ -118,6 +168,17 @@ class AdminWebServer:
             'FOUNDRY_URL', ''
         )
         title = html.escape(identity.chat_title or str(identity.chat_id))
+        if roster is None:
+            roster_html = '<p>Состав кампании не найден.</p>'
+        else:
+            players = ''.join(
+                f'<li>{html.escape(character.name)}</li>' for character in roster.characters
+            )
+            roster_html = (
+                f'<h2>Состав</h2><p>Мастер: Telegram ID '
+                f'{roster.campaign.master_user_id or "не назначен"}</p>'
+                f'<ul>{players or "<li>Игроки не зарегистрированы</li>"}</ul>'
+            )
         if active is None:
             lifecycle = """
             <form method="post" action="/session/start">
@@ -131,7 +192,7 @@ class AdminWebServer:
               <button type="submit">⏹️ Завершить сессию</button>
             </form>"""
         content = f'''
-        <h1>{title}</h1><p>{current}</p>{lifecycle}
+        <h1>{title}</h1>{roster_html}<p>{current}</p>{lifecycle}
         <form method="post" action="/schedule">
           <label>Дата и время <input required type="datetime-local" name="scheduled_at"></label>
           <label>Foundry URL <input required type="url" name="foundry_url" value="{html.escape(default_url)}"></label>
@@ -231,3 +292,10 @@ class AdminWebServer:
         body = content if raw else html.escape(content)
         document = f"""<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>D20 Admin</title><style>body{{font:16px system-ui;max-width:42rem;margin:3rem auto;padding:0 1rem;background:#17151c;color:#eee}}label,input,button{{display:block;width:100%;box-sizing:border-box;margin:.8rem 0}}input,button{{padding:.7rem}}button{{cursor:pointer}}</style><main>{body}</main></html>"""
         return status, {}, document.encode()
+
+    @staticmethod
+    def _json(
+        status: HTTPStatus, payload: Mapping[str, str]
+    ) -> tuple[HTTPStatus, dict[str, str], bytes]:
+        content = json.dumps(payload, ensure_ascii=False).encode()
+        return status, {'Content-Type': 'application/json; charset=utf-8'}, content

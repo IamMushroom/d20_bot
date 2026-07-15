@@ -23,6 +23,9 @@ class CommandSpec:
     menu_description: str
     help_lines: tuple[str, ...]
     aliases: tuple[str, ...] = ()
+    show_in_menu: bool = False
+    requires_platform: bool = True
+    available_with_core: bool = False
 
 
 COMMANDS = (
@@ -31,6 +34,7 @@ COMMANDS = (
         callback=admin,
         menu_description='открыть панель мастера',
         help_lines=('/admin — получить в личку ссылку на веб-панель',),
+        available_with_core=True,
     ),
     CommandSpec(
         name='web_url',
@@ -97,6 +101,8 @@ COMMANDS = (
             '/roll 4d6kh3 — оставить три лучших куба',
             '/roll 2d20kl1 — бросок с помехой',
         ),
+        show_in_menu=True,
+        requires_platform=False,
     ),
     CommandSpec(
         name='roll20',
@@ -104,6 +110,8 @@ COMMANDS = (
         menu_description='бросок с усиленными крайними значениями',
         help_lines=('/roll20 d20 — повышенный шанс минимума и максимума',),
         aliases=('rolld20',),
+        show_in_menu=True,
+        requires_platform=False,
     ),
     CommandSpec(
         name='duality',
@@ -111,12 +119,15 @@ COMMANDS = (
         menu_description='бросок Daggerheart',
         help_lines=('/duality 5 — бросок Daggerheart с модификатором',),
         aliases=('dgh', 'daggerheart'),
+        show_in_menu=True,
+        requires_platform=False,
     ),
     CommandSpec(
         name='timer',
         callback=timer,
         menu_description='поставить таймер',
         help_lines=('/timer 60 — таймер в секундах',),
+        requires_platform=False,
     ),
     CommandSpec(
         name='help',
@@ -124,15 +135,41 @@ COMMANDS = (
         menu_description='показать справку',
         help_lines=('/help — эта справка',),
         aliases=('start',),
+        requires_platform=False,
     ),
     CommandSpec(
         name='version',
         callback=version_command,
         menu_description='показать версию бота',
         help_lines=('/version — версия бота',),
+        requires_platform=False,
     ),
 )
 
-HELP_MESSAGE = '🎲 Команды бота\n\n' + '\n'.join(
-    line for command in COMMANDS for line in command.help_lines
-)
+MENU_COMMANDS = tuple(command for command in COMMANDS if command.show_in_menu)
+
+
+def commands_for(
+    *, platform_enabled: bool, core_connected: bool = False
+) -> tuple[CommandSpec, ...]:
+    return tuple(
+        command
+        for command in COMMANDS
+        if platform_enabled
+        or not command.requires_platform
+        or (core_connected and command.available_with_core)
+    )
+
+
+def help_message(*, platform_enabled: bool, core_connected: bool = False) -> str:
+    return '🎲 Команды бота\n\n' + '\n'.join(
+        line
+        for command in commands_for(
+            platform_enabled=platform_enabled, core_connected=core_connected
+        )
+        for line in command.help_lines
+    )
+
+
+HELP_MESSAGE = help_message(platform_enabled=True)
+BASIC_HELP_MESSAGE = help_message(platform_enabled=False)

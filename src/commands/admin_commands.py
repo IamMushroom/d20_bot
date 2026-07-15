@@ -7,10 +7,12 @@ from telegram.ext import ContextTypes
 
 from commands.game_utils import valid_url
 from commands.helpers import campaign_service, is_admin, session_service
+from core import CoreClient, CoreClientError
 from web.access import AdminAccessService, AdminIdentity
 
 ADMIN_ACCESS_KEY = 'admin_access'
 WEB_BASE_URL_KEY = 'web_base_url'
+CORE_CLIENT_KEY = 'core_client'
 
 
 async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -19,6 +21,21 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
     user = update.effective_user
     if chat is None or message is None or user is None:
+        return
+    core_client: CoreClient | None = context.application.bot_data.get(CORE_CLIENT_KEY)
+    if core_client is not None:
+        try:
+            url = await core_client.create_admin_link(
+                chat.id, user.id, getattr(chat, 'title', None)
+            )
+        except CoreClientError:
+            await context.bot.send_message(
+                chat_id=chat.id,
+                text='⚠️ Core недоступен или отклонил запрос.',
+                reply_to_message_id=message.id,
+            )
+            return
+        await _send_admin_link(update, context, url)
         return
     base_url = await session_service(context).get_web_base_url(
         chat.id
@@ -40,6 +57,14 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     access: AdminAccessService = context.application.bot_data[ADMIN_ACCESS_KEY]
     token = access.create_login(AdminIdentity(chat.id, user.id, getattr(chat, 'title', None)))
     url = f'{base_url.rstrip("/")}/login?{urlencode({"token": token})}'
+    await _send_admin_link(update, context, url)
+
+
+async def _send_admin_link(update: Update, context: ContextTypes.DEFAULT_TYPE, url: str) -> None:
+    chat = update.effective_chat
+    message = update.effective_message
+    user = update.effective_user
+    assert chat is not None and message is not None and user is not None
     try:
         await context.bot.send_message(
             chat_id=user.id,
