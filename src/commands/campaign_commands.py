@@ -9,6 +9,10 @@ from database.repositories import CampaignRepository, CharacterRepository, Sessi
 
 DATABASE_KEY = 'database'
 MAX_TAG_LENGTH = 16
+TAG_SET = 'set'
+TAG_ADMINISTRATOR = 'administrator'
+TAG_UNSUPPORTED = 'unsupported'
+TAG_FAILED = 'failed'
 
 
 async def _is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -22,9 +26,25 @@ async def _is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     return member.status in {'administrator', 'creator', 'owner'}
 
 
-async def _set_tag(
-    context: ContextTypes.DEFAULT_TYPE, chat_id: int, user_id: int, tag: str
-) -> bool:
+async def _set_tag(context: ContextTypes.DEFAULT_TYPE, chat_id: int, user_id: int, tag: str) -> str:
+    try:
+        member = await context.bot.get_chat_member(chat_id, user_id)
+    except TelegramError as error:
+        logging.warning(
+            'Could not get chat member before setting tag',
+            extra={
+                'chat_id': chat_id,
+                'user_id': user_id,
+                'telegram_method': 'getChatMember',
+                'error_type': type(error).__name__,
+                'error_message': str(error),
+                'tag': tag,
+            },
+            exc_info=True,
+        )
+        return TAG_FAILED
+    if member.status in {'administrator', 'creator', 'owner'}:
+        return TAG_ADMINISTRATOR
     try:
         await context.bot.set_chat_member_tag(chat_id=chat_id, user_id=user_id, tag=tag)
     except TelegramError as error:
@@ -40,8 +60,8 @@ async def _set_tag(
             },
             exc_info=True,
         )
-        return False
-    return True
+        return TAG_FAILED
+    return TAG_SET
 
 
 async def master(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -75,8 +95,22 @@ async def master(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     campaigns = CampaignRepository(context.application.bot_data[DATABASE_KEY])
     await campaigns.set_master(chat.id, target.id, getattr(chat, 'title', None))
-    tagged = await _set_tag(context, chat.id, target.id, 'Мастер')
-    suffix = '' if tagged else '\nℹ️ Роль сохранена, но Telegram-тег установить не удалось.'
+    tag_result = (
+        TAG_UNSUPPORTED
+        if getattr(chat, 'type', None) == 'private'
+        else await _set_tag(context, chat.id, target.id, 'Мастер')
+    )
+    if tag_result == TAG_SET:
+        suffix = ''
+    elif tag_result == TAG_ADMINISTRATOR:
+        suffix = (
+            '\nℹ️ Telegram не позволяет боту ставить member tag владельцу или администратору. '
+            'Задайте заголовок «Мастер» вручную в настройках группы.'
+        )
+    elif tag_result == TAG_UNSUPPORTED:
+        suffix = '\nℹ️ Telegram-теги доступны только в группах.'
+    else:
+        suffix = '\nℹ️ Роль сохранена, но Telegram-тег установить не удалось.'
     await context.bot.send_message(
         chat_id=chat.id,
         text=f'🎭 Мастер кампании назначен: {target.full_name}{suffix}',
@@ -111,8 +145,19 @@ async def player(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         return
     character = await CharacterRepository(database).register(campaign.id, user.id, name)
-    tagged = await _set_tag(context, chat.id, user.id, character.name)
-    suffix = '' if tagged else '\nℹ️ Персонаж сохранён, но Telegram-тег установить не удалось.'
+    tag_result = (
+        TAG_UNSUPPORTED
+        if getattr(chat, 'type', None) == 'private'
+        else await _set_tag(context, chat.id, user.id, character.name)
+    )
+    if tag_result == TAG_SET:
+        suffix = ''
+    elif tag_result == TAG_ADMINISTRATOR:
+        suffix = '\nℹ️ Персонаж сохранён, но Telegram member tag доступен только обычным участникам.'
+    elif tag_result == TAG_UNSUPPORTED:
+        suffix = '\nℹ️ Telegram-теги доступны только в группах.'
+    else:
+        suffix = '\nℹ️ Персонаж сохранён, но Telegram-тег установить не удалось.'
     await context.bot.send_message(
         chat_id=chat.id,
         text=f'🧙 Игрок зарегистрирован: {character.name}{suffix}',
