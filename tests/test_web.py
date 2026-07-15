@@ -171,7 +171,7 @@ def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
     monkeypatch.setenv('GAME_TIMEZONE', 'UTC')
 
     async def scenario():
-        database, _campaigns, sessions, access, bot = await setup(tmp_path)
+        database, campaigns, sessions, access, bot = await setup(tmp_path)
         server = AdminWebServer(access, sessions, bot)
         identity = AdminIdentity(-100, 7, 'Campaign')
         token = access.create_login(identity)
@@ -253,6 +253,66 @@ def test_web_server_start_read_request_and_close(tmp_path):
 
     method, target, headers, body = asyncio.run(scenario())
     assert (method, target, headers['content-length'], body) == ('POST', '/schedule', '3', b'a=1')
+
+
+def test_web_session_lifecycle(tmp_path):
+    async def scenario():
+        database, campaigns, sessions, access, bot = await setup(tmp_path)
+        server = AdminWebServer(access, sessions, bot)
+        identity = AdminIdentity(-100, 7, 'Campaign')
+        token = access.create_login(identity)
+        login = await server._route('GET', f'/login?token={token}', {}, b'')
+        headers = {'cookie': login[1]['Set-Cookie'].split(';', 1)[0]}
+
+        too_long = await server._route(
+            'POST', '/session/start', headers, f'title={"x" * 101}'.encode()
+        )
+        started = await server._route('POST', '/session/start', headers, 'title=Башня'.encode())
+        active_page = await server._route('GET', '/', headers, b'')
+        duplicate = await server._route('POST', '/session/start', headers, b'')
+        stopped = await server._route('POST', '/session/stop', headers, b'')
+        second_stop = await server._route('POST', '/session/stop', headers, b'')
+        active = await sessions.get_active(-100)
+        await campaigns.assign_master(-100, 8, 'Campaign')
+        forbidden_start = await server._route('POST', '/session/start', headers, b'')
+        forbidden_stop = await server._route('POST', '/session/stop', headers, b'')
+        await database.close()
+        return (
+            too_long,
+            started,
+            active_page,
+            duplicate,
+            stopped,
+            second_stop,
+            forbidden_start,
+            forbidden_stop,
+            active,
+            bot,
+        )
+
+    (
+        too_long,
+        started,
+        active_page,
+        duplicate,
+        stopped,
+        second_stop,
+        forbidden_start,
+        forbidden_stop,
+        active,
+        bot,
+    ) = asyncio.run(scenario())
+    assert too_long[0] is HTTPStatus.BAD_REQUEST
+    assert started[0] is HTTPStatus.SEE_OTHER
+    assert 'Активная сессия'.encode() in active_page[2]
+    assert duplicate[0] is HTTPStatus.CONFLICT
+    assert stopped[0] is HTTPStatus.SEE_OTHER
+    assert second_stop[0] is HTTPStatus.CONFLICT
+    assert forbidden_start[0] is HTTPStatus.FORBIDDEN
+    assert forbidden_stop[0] is HTTPStatus.FORBIDDEN
+    assert active is None
+    assert any('началась' in call.kwargs['text'] for call in bot.send_message.await_args_list)
+    assert any('завершена' in call.kwargs['text'] for call in bot.send_message.await_args_list)
 
 
 def test_web_server_handles_http_response(tmp_path):

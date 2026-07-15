@@ -55,6 +55,10 @@ class SessionService:
         campaign = await self._campaigns.get_by_chat_id(chat_id)
         return await self._sessions.get_planned(campaign.id) if campaign is not None else None
 
+    async def get_active(self, chat_id: int) -> Session | None:
+        campaign = await self._campaigns.get_by_chat_id(chat_id)
+        return await self._sessions.get_active(campaign.id) if campaign is not None else None
+
     async def schedule(
         self,
         chat_id: int,

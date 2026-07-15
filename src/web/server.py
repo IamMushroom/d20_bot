@@ -8,7 +8,7 @@ from os import getenv
 from urllib.parse import parse_qs, urlsplit
 
 from commands.game_utils import game_message, game_timezone, valid_url
-from services import SessionService
+from services import SessionService, SessionStartStatus, SessionStopStatus
 from web.access import AdminAccessService, AdminIdentity
 
 MAX_REQUEST_SIZE = 16 * 1024
@@ -100,10 +100,15 @@ class AdminWebServer:
             return await self._dashboard(identity)
         if method == 'POST' and url.path == '/schedule':
             return await self._schedule(identity, parse_qs(body.decode()))
+        if method == 'POST' and url.path == '/session/start':
+            return await self._start_session(identity, parse_qs(body.decode()))
+        if method == 'POST' and url.path == '/session/stop':
+            return await self._stop_session(identity)
         return self._page(HTTPStatus.NOT_FOUND, 'Страница не найдена.')
 
     async def _dashboard(self, identity: AdminIdentity) -> tuple[HTTPStatus, dict[str, str], bytes]:
         session = await self._sessions.get_planned(identity.chat_id)
+        active = await self._sessions.get_active(identity.chat_id)
         current = (
             html.escape(game_message(session)).replace('\n', '<br>')
             if session
@@ -113,8 +118,20 @@ class AdminWebServer:
             'FOUNDRY_URL', ''
         )
         title = html.escape(identity.chat_title or str(identity.chat_id))
+        if active is None:
+            lifecycle = """
+            <form method="post" action="/session/start">
+              <label>Название сессии <input name="title" maxlength="100"></label>
+              <button type="submit">▶️ Начать сессию</button>
+            </form>"""
+        else:
+            active_title = f' — {html.escape(active.title)}' if active.title else ''
+            lifecycle = f"""<p>▶️ Активная сессия №{active.number}{active_title}</p>
+            <form method="post" action="/session/stop">
+              <button type="submit">⏹️ Завершить сессию</button>
+            </form>"""
         content = f'''
-        <h1>{title}</h1><p>{current}</p>
+        <h1>{title}</h1><p>{current}</p>{lifecycle}
         <form method="post" action="/schedule">
           <label>Дата и время <input required type="datetime-local" name="scheduled_at"></label>
           <label>Foundry URL <input required type="url" name="foundry_url" value="{html.escape(default_url)}"></label>
@@ -152,6 +169,50 @@ class AdminWebServer:
                 )
         except Exception:
             logging.exception('Could not update schedule pin from admin web')
+        return HTTPStatus.SEE_OTHER, {'Location': '/'}, b''
+
+    async def _start_session(
+        self, identity: AdminIdentity, form: Mapping[str, list[str]]
+    ) -> tuple[HTTPStatus, dict[str, str], bytes]:
+        title = form.get('title', [''])[0].strip() or None
+        if title is not None and len(title) > 100:
+            return self._page(HTTPStatus.BAD_REQUEST, 'Название слишком длинное.')
+        result = await self._sessions.start(identity.chat_id, identity.user_id, title)
+        if result.status is SessionStartStatus.FORBIDDEN:
+            return self._page(HTTPStatus.FORBIDDEN, 'Доступ к кампании отозван.')
+        if result.status is SessionStartStatus.ALREADY_ACTIVE:
+            return self._page(HTTPStatus.CONFLICT, 'Сессия уже активна.')
+        session = result.session
+        assert session is not None
+        if result.announcement_message_id is not None:
+            try:
+                await self._bot.unpin_chat_message(
+                    chat_id=identity.chat_id,
+                    message_id=result.announcement_message_id,
+                )
+            except Exception:
+                logging.exception('Could not unpin started session from admin web')
+        title_text = f' — {session.title}' if session.title else ''
+        await self._bot.send_message(
+            chat_id=identity.chat_id,
+            text=f'▶️ Сессия №{session.number}{title_text} началась!',
+        )
+        return HTTPStatus.SEE_OTHER, {'Location': '/'}, b''
+
+    async def _stop_session(
+        self, identity: AdminIdentity
+    ) -> tuple[HTTPStatus, dict[str, str], bytes]:
+        result = await self._sessions.stop(identity.chat_id, identity.user_id)
+        if result.status is SessionStopStatus.FORBIDDEN:
+            return self._page(HTTPStatus.FORBIDDEN, 'Доступ к кампании отозван.')
+        if result.status is SessionStopStatus.NO_ACTIVE_SESSION:
+            return self._page(HTTPStatus.CONFLICT, 'Активной сессии нет.')
+        session = result.session
+        assert session is not None
+        await self._bot.send_message(
+            chat_id=identity.chat_id,
+            text=f'⏹️ Сессия №{session.number} завершена.',
+        )
         return HTTPStatus.SEE_OTHER, {'Location': '/'}, b''
 
     @staticmethod
