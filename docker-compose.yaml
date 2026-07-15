@@ -10,8 +10,14 @@ services:
       DATABASE_URL: ${DATABASE_URL:-sqlite:////data/d20.sqlite3}
       GAME_TIMEZONE: ${GAME_TIMEZONE:-Europe/Moscow}
       FOUNDRY_URL: ${FOUNDRY_URL:-}
+      WEB_BASE_URL: ${WEB_BASE_URL:-}
+      WEB_HOST: 0.0.0.0
+      WEB_PORT: 8190
+      WEB_SECURE_COOKIE: ${WEB_SECURE_COOKIE:-true}
     volumes:
       - d20-data:/data
+    ports:
+      - ${WEB_PORT:-8190}:8190
     tmpfs:
       - /tmp:size=16m,mode=1777
     security_opt:

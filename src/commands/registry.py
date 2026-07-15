@@ -2,6 +2,7 @@ from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from typing import Any
 
+from commands.admin_commands import admin
 from commands.duality_commands import duality
 from commands.game_config_commands import game_url
 from commands.game_schedule_commands import game
@@ -25,6 +26,12 @@ class CommandSpec:
 
 
 COMMANDS = (
+    CommandSpec(
+        name='admin',
+        callback=admin,
+        menu_description='открыть панель мастера',
+        help_lines=('/admin — получить в личку ссылку на веб-панель',),
+    ),
     CommandSpec(
         name='master',
         callback=master,

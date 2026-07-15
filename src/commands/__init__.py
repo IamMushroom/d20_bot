@@ -1,6 +1,7 @@
 from commands import duality_commands as duality_commands
 from commands import error_commands as error_commands
 from commands import timer_commands as timer_commands
+from commands.admin_commands import admin
 from commands.duality_commands import duality
 from commands.error_commands import handle_error
 from commands.game_config_commands import game_url
@@ -17,6 +18,7 @@ from commands.version_commands import version_command
 
 __all__ = (
     'duality',
+    'admin',
     'handle_error',
     'game',
     'game_url',

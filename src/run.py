@@ -8,11 +8,14 @@ from telegram.ext import ApplicationBuilder, CommandHandler, filters
 
 import commands
 import log_format
+from commands.admin_commands import ADMIN_ACCESS_KEY, WEB_BASE_URL_KEY
 from commands.helpers import CAMPAIGN_SERVICE_KEY, DATABASE_KEY, SESSION_SERVICE_KEY
 from database import apply_migrations, create_database
 from services import CampaignService, SessionService
+from web import AdminAccessService, AdminWebServer
 
 MIGRATIONS_DIRECTORY = Path(__file__).resolve().parent.parent / 'migrations'
+WEB_SERVER_KEY = 'web_server'
 
 
 async def set_bot_commands(application) -> None:
@@ -30,13 +33,33 @@ async def initialize_application(application) -> None:
     except BaseException:
         await database.close()
         raise
-    application.bot_data[DATABASE_KEY] = database
-    application.bot_data[CAMPAIGN_SERVICE_KEY] = CampaignService(database)
-    application.bot_data[SESSION_SERVICE_KEY] = SessionService(database)
-    await set_bot_commands(application)
+    try:
+        campaign_service = CampaignService(database)
+        session_service = SessionService(database)
+        application.bot_data[DATABASE_KEY] = database
+        application.bot_data[CAMPAIGN_SERVICE_KEY] = campaign_service
+        application.bot_data[SESSION_SERVICE_KEY] = session_service
+        base_url = getenv('WEB_BASE_URL', '').strip()
+        if base_url:
+            access = AdminAccessService()
+            server = AdminWebServer(access, session_service, application.bot)
+            await server.start(getenv('WEB_HOST', '0.0.0.0'), int(getenv('WEB_PORT', '8190')))
+            application.bot_data[ADMIN_ACCESS_KEY] = access
+            application.bot_data[WEB_BASE_URL_KEY] = base_url
+            application.bot_data[WEB_SERVER_KEY] = server
+        await set_bot_commands(application)
+    except BaseException:
+        await database.close()
+        application.bot_data.clear()
+        raise
 
 
 async def shutdown_application(application) -> None:
+    server = application.bot_data.pop(WEB_SERVER_KEY, None)
+    if server is not None:
+        await server.close()
+    application.bot_data.pop(ADMIN_ACCESS_KEY, None)
+    application.bot_data.pop(WEB_BASE_URL_KEY, None)
     application.bot_data.pop(CAMPAIGN_SERVICE_KEY, None)
     application.bot_data.pop(SESSION_SERVICE_KEY, None)
     database = application.bot_data.pop(DATABASE_KEY, None)

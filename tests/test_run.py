@@ -75,8 +75,12 @@ def test_initialize_and_shutdown_application(monkeypatch, tmp_path):
     create_database = AsyncMock(return_value=database)
     apply_migrations = AsyncMock()
     set_bot_commands = AsyncMock()
-    application = SimpleNamespace(bot_data={})
-    monkeypatch.setattr(run, 'getenv', lambda name, default=None: 'sqlite:///:memory:')
+    application = SimpleNamespace(bot_data={}, bot=AsyncMock())
+    monkeypatch.setattr(
+        run,
+        'getenv',
+        lambda name, default=None: 'sqlite:///:memory:' if name == 'DATABASE_URL' else default,
+    )
     monkeypatch.setattr(run, 'create_database', create_database)
     monkeypatch.setattr(run, 'apply_migrations', apply_migrations)
     monkeypatch.setattr(run, 'set_bot_commands', set_bot_commands)
@@ -107,6 +111,36 @@ def test_initialize_application_closes_database_after_migration_error(monkeypatc
     with pytest.raises(RuntimeError, match='broken'):
         asyncio.run(run.initialize_application(SimpleNamespace(bot_data={})))
 
+    database.close.assert_awaited_once_with()
+
+
+def test_initialize_and_shutdown_web_server(monkeypatch, tmp_path):
+    async def scenario():
+        database = AsyncMock()
+        server = SimpleNamespace(start=AsyncMock(), close=AsyncMock())
+        server_factory = Mock(return_value=server)
+        values = {
+            'DATABASE_URL': 'sqlite:///:memory:',
+            'WEB_BASE_URL': 'https://d20.example',
+            'WEB_HOST': '127.0.0.1',
+            'WEB_PORT': '9000',
+        }
+        application = SimpleNamespace(bot_data={}, bot=AsyncMock())
+        monkeypatch.setattr(run, 'getenv', lambda name, default=None: values.get(name, default))
+        monkeypatch.setattr(run, 'create_database', AsyncMock(return_value=database))
+        monkeypatch.setattr(run, 'apply_migrations', AsyncMock())
+        monkeypatch.setattr(run, 'set_bot_commands', AsyncMock())
+        monkeypatch.setattr(run, 'AdminWebServer', server_factory)
+        monkeypatch.setattr(run, 'MIGRATIONS_DIRECTORY', tmp_path)
+
+        await run.initialize_application(application)
+        await run.shutdown_application(application)
+        return database, server, server_factory
+
+    database, server, server_factory = asyncio.run(scenario())
+    server_factory.assert_called_once()
+    server.start.assert_awaited_once_with('127.0.0.1', 9000)
+    server.close.assert_awaited_once_with()
     database.close.assert_awaited_once_with()
 
 

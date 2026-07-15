@@ -25,6 +25,10 @@ class CampaignService:
     async def assign_master(self, chat_id: int, user_id: int, title: str | None = None) -> Campaign:
         return await self._campaigns.set_master(chat_id, user_id, title)
 
+    async def is_master(self, chat_id: int, user_id: int) -> bool:
+        campaign = await self._campaigns.get_by_chat_id(chat_id)
+        return campaign is not None and campaign.master_user_id == user_id
+
     async def register_player(
         self, chat_id: int, user_id: int, name: str, title: str | None = None
     ) -> PlayerRegistration:
