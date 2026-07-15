@@ -21,7 +21,8 @@ migrations/
 ├── 001_initial_schema.sql
 ├── 002_game_schedule.sql
 ├── 003_game_config.sql
-└── 004_unify_schedules_and_sessions.sql
+├── 004_unify_schedules_and_sessions.sql
+└── 005_campaign_master.sql
 ```
 
 Telegram-команды не должны выполнять SQL напрямую. Ожидаемый поток зависимостей:
@@ -166,6 +167,7 @@ schema_migrations(version, applied_at)
 | `id` | Внутренний идентификатор |
 | `chat_id` | Уникальный Telegram chat ID |
 | `title` | Название кампании или чата |
+| `master_user_id` | Telegram user ID назначенного мастера |
 | `created_at` | Время создания в UTC |
 
 ### Character
@@ -205,6 +207,7 @@ campaign = await CampaignRepository(database).get_or_create(
 
 - `get_or_create(chat_id, title)` создаёт кампанию или возвращает существующую. Переданный непустой `title` обновляет название.
 - `get_by_chat_id(chat_id)` ищет кампанию по Telegram chat ID.
+- `set_master(chat_id, user_id, title)` назначает или заменяет мастера кампании.
 
 ### CharacterRepository
 

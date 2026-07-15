@@ -2,6 +2,7 @@ from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from typing import Any
 
+from commands.campaign_commands import master, player, session_start, session_stop
 from commands.duality_commands import duality
 from commands.game_commands import game, game_url
 from commands.help_commands import help_command
@@ -22,6 +23,32 @@ class CommandSpec:
 
 
 COMMANDS = (
+    CommandSpec(
+        name='master',
+        callback=master,
+        menu_description='назначить мастера кампании',
+        help_lines=('/master — назначить себя или автора сообщения через reply мастером',),
+    ),
+    CommandSpec(
+        name='player',
+        callback=player,
+        menu_description='зарегистрировать персонажа игрока',
+        help_lines=('/player <имя> — зарегистрироваться и получить тег персонажа',),
+        aliases=('character',),
+    ),
+    CommandSpec(
+        name='session_start',
+        callback=session_start,
+        menu_description='начать игровую сессию',
+        help_lines=('/session_start [название] — начать сессию (для мастера)',),
+    ),
+    CommandSpec(
+        name='session_stop',
+        callback=session_stop,
+        menu_description='завершить игровую сессию',
+        help_lines=('/session_stop — завершить активную сессию (для мастера)',),
+        aliases=('session_finish',),
+    ),
     CommandSpec(
         name='game',
         callback=game,

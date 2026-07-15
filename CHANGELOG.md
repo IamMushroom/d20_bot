@@ -13,6 +13,8 @@
 - Команда `/game_url` для сохранения адреса Foundry по умолчанию для конкретного чата.
 - Автоматическое включение Compose-профиля `debug` при deploy ветки `dev`.
 - Единая модель planned/active/finished для расписания и игровых сессий.
+- Команды `/session_start` и `/session_stop` для жизненного цикла игровых сессий.
+- Роли мастера и игроков с Telegram member tags через `/master` и `/player`.
 
 ### Fixed
 

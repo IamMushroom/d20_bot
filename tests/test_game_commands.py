@@ -226,3 +226,37 @@ def test_game_command_reschedules_existing_session_and_replaces_pin(tmp_path, mo
     assert rows[0]['scheduled_at'] == '2027-02-02T19:30:00+00:00'
     assert rows[0]['message_id'] == 200
     bot.unpin_chat_message.assert_awaited_once_with(chat_id=20, message_id=100)
+
+
+def test_game_url_rejects_non_admin_and_invalid_url(tmp_path):
+    async def scenario():
+        database = await SQLiteDatabase.connect(str(tmp_path / 'game-url-errors.sqlite3'))
+        await apply_migrations(database, MIGRATIONS)
+        bot = SimpleNamespace(
+            send_message=AsyncMock(),
+            get_chat_member=AsyncMock(return_value=SimpleNamespace(status='member')),
+        )
+        context = SimpleNamespace(
+            args=['https://foundry.example'],
+            bot=bot,
+            application=SimpleNamespace(bot_data={'database': database}),
+        )
+        update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=-10, type='group'),
+            effective_message=SimpleNamespace(id=11),
+            effective_user=SimpleNamespace(id=12),
+        )
+        await commands.game_url(update, context)
+        denied = bot.send_message.await_args.kwargs['text']
+        bot.get_chat_member.return_value.status = 'administrator'
+        context.args = ['not-a-url']
+        await commands.game_url(update, context)
+        invalid = bot.send_message.await_args.kwargs['text']
+        saved = await database.fetch_one('SELECT * FROM game_configs WHERE chat_id = ?', (-10,))
+        await database.close()
+        return denied, invalid, saved
+
+    denied, invalid, saved = asyncio.run(scenario())
+    assert 'только администраторы' in denied
+    assert 'Формат' in invalid
+    assert saved is None

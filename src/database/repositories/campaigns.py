@@ -9,6 +9,7 @@ def _campaign(row: Row) -> Campaign:
         id=int(row['id']),
         chat_id=int(row['chat_id']),
         title=str(row['title']) if row['title'] is not None else None,
+        master_user_id=(int(row['master_user_id']) if row['master_user_id'] is not None else None),
         created_at=datetime.fromisoformat(str(row['created_at'])),
     )
 
@@ -36,3 +37,12 @@ class CampaignRepository:
             'SELECT * FROM campaigns WHERE chat_id = ?', (chat_id,)
         )
         return _campaign(row) if row is not None else None
+
+    async def set_master(self, chat_id: int, user_id: int, title: str | None = None) -> Campaign:
+        campaign = await self.get_or_create(chat_id, title)
+        row = await self._database.fetch_one(
+            'UPDATE campaigns SET master_user_id = ? WHERE id = ? RETURNING *',
+            (user_id, campaign.id),
+        )
+        assert row is not None
+        return _campaign(row)

@@ -45,6 +45,7 @@ def test_migrations_are_idempotent(tmp_path):
         {'version': 2},
         {'version': 3},
         {'version': 4},
+        {'version': 5},
     ]
 
 
@@ -58,12 +59,18 @@ def test_schedule_migration_preserves_sessions_recaps_and_planned_game(tmp_path)
 
         database = await SQLiteDatabase.connect(str(tmp_path / 'upgrade.sqlite3'))
         await apply_migrations(database, migration_dir)
-        campaign = await CampaignRepository(database).get_or_create(-100, 'Campaign')
-        character = await CharacterRepository(database).register(campaign.id, 42, 'Tilly')
+        campaign_row = await database.fetch_one(
+            """INSERT INTO campaigns (chat_id, title, created_at)
+            VALUES (?, ?, ?) RETURNING *""",
+            (-100, 'Campaign', '2026-07-01T12:00:00+00:00'),
+        )
+        assert campaign_row is not None
+        campaign_id = int(campaign_row['id'])
+        character = await CharacterRepository(database).register(campaign_id, 42, 'Tilly')
         session = await database.fetch_one(
             """INSERT INTO sessions (campaign_id, number, title, started_at)
             VALUES (?, 1, ?, ?) RETURNING *""",
-            (campaign.id, 'Old session', '2026-07-10T16:00:00+00:00'),
+            (campaign_id, 'Old session', '2026-07-10T16:00:00+00:00'),
         )
         assert session is not None
         session_id = int(session['id'])
@@ -85,7 +92,7 @@ def test_schedule_migration_preserves_sessions_recaps_and_planned_game(tmp_path)
         (migration_dir / source.name).write_text(source.read_text(encoding='utf-8'))
         await apply_migrations(database, migration_dir)
 
-        sessions = await SessionRepository(database).list(campaign.id)
+        sessions = await SessionRepository(database).list(campaign_id)
         recaps = await RecapRepository(database).list_by_session(session_id)
         old_table = await database.fetch_one(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'game_schedules'"
