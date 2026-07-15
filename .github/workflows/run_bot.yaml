@@ -22,6 +22,8 @@ jobs:
   deploy:
     needs: tests
     runs-on: [self-hosted, raspberry]
+    env:
+      COMPOSE_PROFILES: debug
     environment:
       name: ${{ github.ref_name }}
     steps:

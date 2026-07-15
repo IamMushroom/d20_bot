@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from commands.duality_commands import duality
-from commands.game_commands import game
+from commands.game_commands import game, game_url
 from commands.help_commands import help_command
 from commands.roll_commands import roll, roll20
 from commands.timer_commands import timer
@@ -29,6 +29,15 @@ COMMANDS = (
         help_lines=(
             '/game — показать следующую игру',
             '/game 20.07 19:00 [ссылка] — назначить игру (для администраторов)',
+        ),
+    ),
+    CommandSpec(
+        name='game_url',
+        callback=game_url,
+        menu_description='показать или задать адрес Foundry',
+        help_lines=(
+            '/game_url — показать адрес Foundry по умолчанию',
+            '/game_url https://foundry.example — сохранить адрес (для администраторов)',
         ),
     ),
     CommandSpec(

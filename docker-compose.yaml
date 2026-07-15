@@ -32,5 +32,29 @@ services:
         reservations:
           memory: 20M
 
+  sqlite-web:
+    image: d20-sqlite-web:local
+    build:
+      context: .
+      dockerfile: Dockerfile.sqlite-web
+    profiles: [debug]
+    command: [d20.sqlite3, --host, 0.0.0.0, --port, "8080", --foreign-keys]
+    read_only: true
+    volumes:
+      - d20-data:/data
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    ports:
+      - 127.0.0.1:${SQLITE_WEB_PORT:-8080}:8080
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
 volumes:
   d20-data:

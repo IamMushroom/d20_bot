@@ -39,7 +39,7 @@ def test_migrations_are_idempotent(tmp_path):
         await database.close()
         return rows
 
-    assert asyncio.run(scenario()) == [{'version': 1}, {'version': 2}]
+    assert asyncio.run(scenario()) == [{'version': 1}, {'version': 2}, {'version': 3}]
 
 
 def test_invalid_migration_filename_is_rejected(tmp_path):

@@ -145,3 +145,41 @@ def test_game_reports_pin_failure_in_private_chat(tmp_path):
 
     bot = asyncio.run(scenario())
     assert 'закрепить его не удалось' in bot.send_message.await_args.kwargs['text']
+
+
+def test_game_url_sets_and_supplies_chat_default(tmp_path, monkeypatch):
+    monkeypatch.setenv('GAME_TIMEZONE', 'UTC')
+    monkeypatch.setenv('FOUNDRY_URL', 'https://foundry.example/environment')
+
+    async def scenario():
+        database = await SQLiteDatabase.connect(str(tmp_path / 'game-url.sqlite3'))
+        await apply_migrations(database, MIGRATIONS)
+        bot = SimpleNamespace(
+            send_message=AsyncMock(return_value=SimpleNamespace(id=15)),
+            get_chat_member=AsyncMock(),
+            pin_chat_message=AsyncMock(),
+            unpin_chat_message=AsyncMock(),
+        )
+        context = SimpleNamespace(
+            args=['https://foundry.example/chat'],
+            bot=bot,
+            application=SimpleNamespace(bot_data={'database': database}),
+        )
+        update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=10, type='private'),
+            effective_message=SimpleNamespace(id=11),
+            effective_user=SimpleNamespace(id=12),
+        )
+        await commands.game_url(update, context)
+        context.args = []
+        await commands.game_url(update, context)
+        shown_url = bot.send_message.await_args.kwargs['text']
+        context.args = ['20.07.2026', '19:00']
+        await commands.game(update, context)
+        await database.close()
+        return bot, shown_url
+
+    bot, shown_url = asyncio.run(scenario())
+    assert 'https://foundry.example/chat' in shown_url
+    announcement = bot.send_message.await_args_list[-1].kwargs['text']
+    assert 'Foundry: https://foundry.example/chat' in announcement

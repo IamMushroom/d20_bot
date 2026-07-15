@@ -94,7 +94,10 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if len(context.args) not in {2, 3}:
         await context.bot.send_message(chat_id=chat.id, text=USAGE, reply_to_message_id=message.id)
         return
-    foundry_url = context.args[2] if len(context.args) == 3 else getenv('FOUNDRY_URL', '')
+    default_url = await repository.get_default_url(chat.id)
+    foundry_url = (
+        context.args[2] if len(context.args) == 3 else default_url or getenv('FOUNDRY_URL', '')
+    )
     if not _valid_url(foundry_url):
         await context.bot.send_message(
             chat_id=chat.id,
@@ -138,3 +141,49 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await context.bot.unpin_chat_message(chat_id=chat.id, message_id=previous.message_id)
         except TelegramError:
             logging.warning('Could not unpin previous game schedule', extra={'chat_id': chat.id})
+
+
+async def game_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show or set the default Foundry URL for this chat."""
+    chat = update.effective_chat
+    message = update.effective_message
+    if chat is None or message is None:
+        return
+
+    repository = GameScheduleRepository(context.application.bot_data[DATABASE_KEY])
+    if not context.args:
+        foundry_url = await repository.get_default_url(chat.id) or getenv('FOUNDRY_URL', '')
+        text = (
+            f'🏰 Адрес Foundry по умолчанию: {foundry_url}'
+            if _valid_url(foundry_url)
+            else '📭 Адрес Foundry по умолчанию пока не задан.'
+        )
+        await context.bot.send_message(chat_id=chat.id, text=text, reply_to_message_id=message.id)
+        return
+
+    try:
+        allowed = await _is_admin(update, context)
+    except TelegramError:
+        allowed = False
+    if not allowed:
+        await context.bot.send_message(
+            chat_id=chat.id,
+            text='⛔ Менять адрес игры могут только администраторы чата.',
+            reply_to_message_id=message.id,
+        )
+        return
+
+    if len(context.args) != 1 or not _valid_url(context.args[0]):
+        await context.bot.send_message(
+            chat_id=chat.id,
+            text='⚠️ Формат: /game_url https://foundry.example',
+            reply_to_message_id=message.id,
+        )
+        return
+
+    await repository.set_default_url(chat.id, context.args[0], datetime.now(UTC))
+    await context.bot.send_message(
+        chat_id=chat.id,
+        text=f'✅ Адрес Foundry по умолчанию сохранён: {context.args[0]}',
+        reply_to_message_id=message.id,
+    )
