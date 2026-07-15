@@ -84,6 +84,8 @@ def test_initialize_and_shutdown_application(monkeypatch, tmp_path):
     monkeypatch.setattr(run, 'create_database', create_database)
     monkeypatch.setattr(run, 'apply_migrations', apply_migrations)
     monkeypatch.setattr(run, 'set_bot_commands', set_bot_commands)
+    server = SimpleNamespace(start=AsyncMock(), close=AsyncMock())
+    monkeypatch.setattr(run, 'AdminWebServer', Mock(return_value=server))
     monkeypatch.setattr(run, 'MIGRATIONS_DIRECTORY', tmp_path)
 
     asyncio.run(run.initialize_application(application))
@@ -98,6 +100,7 @@ def test_initialize_and_shutdown_application(monkeypatch, tmp_path):
     asyncio.run(run.shutdown_application(application))
 
     database.close.assert_awaited_once_with()
+    server.close.assert_awaited_once_with()
     assert run.DATABASE_KEY not in application.bot_data
     assert run.CAMPAIGN_SERVICE_KEY not in application.bot_data
     assert run.SESSION_SERVICE_KEY not in application.bot_data
@@ -151,11 +154,15 @@ def test_initialize_application_uses_absolute_container_database_path(monkeypatc
     monkeypatch.setattr(run, 'create_database', create_database)
     monkeypatch.setattr(run, 'apply_migrations', AsyncMock())
     monkeypatch.setattr(run, 'set_bot_commands', AsyncMock())
+    server = SimpleNamespace(start=AsyncMock(), close=AsyncMock())
+    monkeypatch.setattr(run, 'AdminWebServer', Mock(return_value=server))
     monkeypatch.setattr(run, 'MIGRATIONS_DIRECTORY', tmp_path)
 
-    asyncio.run(run.initialize_application(SimpleNamespace(bot_data={})))
+    application = SimpleNamespace(bot_data={}, bot=AsyncMock())
+    asyncio.run(run.initialize_application(application))
 
     create_database.assert_awaited_once_with('sqlite:////data/d20.sqlite3')
+    asyncio.run(run.shutdown_application(application))
 
 
 def test_shutdown_application_without_database():

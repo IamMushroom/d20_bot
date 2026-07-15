@@ -40,13 +40,12 @@ async def initialize_application(application) -> None:
         application.bot_data[CAMPAIGN_SERVICE_KEY] = campaign_service
         application.bot_data[SESSION_SERVICE_KEY] = session_service
         base_url = getenv('WEB_BASE_URL', '').strip()
-        if base_url:
-            access = AdminAccessService()
-            server = AdminWebServer(access, session_service, application.bot)
-            await server.start(getenv('WEB_HOST', '0.0.0.0'), int(getenv('WEB_PORT', '8190')))
-            application.bot_data[ADMIN_ACCESS_KEY] = access
-            application.bot_data[WEB_BASE_URL_KEY] = base_url
-            application.bot_data[WEB_SERVER_KEY] = server
+        access = AdminAccessService()
+        server = AdminWebServer(access, session_service, application.bot)
+        await server.start(getenv('WEB_HOST', '0.0.0.0'), int(getenv('WEB_PORT', '8190')))
+        application.bot_data[ADMIN_ACCESS_KEY] = access
+        application.bot_data[WEB_BASE_URL_KEY] = base_url
+        application.bot_data[WEB_SERVER_KEY] = server
         await set_bot_commands(application)
     except BaseException:
         await database.close()

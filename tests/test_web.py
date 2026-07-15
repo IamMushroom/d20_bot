@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock
 
 from telegram.error import BadRequest
 
-from commands.admin_commands import ADMIN_ACCESS_KEY, WEB_BASE_URL_KEY, admin
-from commands.helpers import CAMPAIGN_SERVICE_KEY
+from commands.admin_commands import ADMIN_ACCESS_KEY, WEB_BASE_URL_KEY, admin, web_url
+from commands.helpers import CAMPAIGN_SERVICE_KEY, SESSION_SERVICE_KEY
 from database import SQLiteDatabase, apply_migrations
 from services import CampaignService, SessionService
 from web import AdminAccessService, AdminWebServer
@@ -47,6 +47,18 @@ def test_admin_access_uses_one_time_logins_and_expiring_sessions():
     assert access.authenticate(session_id) is None
 
 
+def test_admin_commands_ignore_updates_without_chat():
+    async def scenario():
+        update = SimpleNamespace(effective_chat=None, effective_message=None, effective_user=None)
+        context = SimpleNamespace(bot=SimpleNamespace(send_message=AsyncMock()))
+        await admin(update, context)
+        await web_url(update, context)
+        return context.bot
+
+    bot = asyncio.run(scenario())
+    bot.send_message.assert_not_awaited()
+
+
 def test_admin_command_validates_configuration_and_master(tmp_path):
     async def scenario():
         database, campaigns, _sessions, access, bot = await setup(tmp_path)
@@ -55,7 +67,11 @@ def test_admin_command_validates_configuration_and_master(tmp_path):
             effective_message=SimpleNamespace(id=10),
             effective_user=SimpleNamespace(id=7),
         )
-        data = {CAMPAIGN_SERVICE_KEY: campaigns, ADMIN_ACCESS_KEY: access}
+        data = {
+            CAMPAIGN_SERVICE_KEY: campaigns,
+            SESSION_SERVICE_KEY: _sessions,
+            ADMIN_ACCESS_KEY: access,
+        }
         context = SimpleNamespace(application=SimpleNamespace(bot_data=data), bot=bot)
 
         await admin(update, context)
@@ -72,7 +88,7 @@ def test_admin_command_validates_configuration_and_master(tmp_path):
         return disabled, forbidden, private_message
 
     disabled, forbidden, private_message = asyncio.run(scenario())
-    assert 'WEB_BASE_URL' in disabled
+    assert '/web_url' in disabled
     assert 'только назначенному мастеру' in forbidden
     assert private_message['chat_id'] == 7
     assert 'https://d20.example/login?token=' in private_message['text']
@@ -86,6 +102,7 @@ def test_admin_command_reports_private_message_failure(tmp_path):
             application=SimpleNamespace(
                 bot_data={
                     CAMPAIGN_SERVICE_KEY: campaigns,
+                    SESSION_SERVICE_KEY: _sessions,
                     ADMIN_ACCESS_KEY: access,
                     WEB_BASE_URL_KEY: 'http://localhost:8190',
                 }
@@ -102,6 +119,51 @@ def test_admin_command_reports_private_message_failure(tmp_path):
         return bot.send_message.await_args.kwargs['text']
 
     assert 'личные сообщения' in asyncio.run(scenario())
+
+
+def test_web_url_command_sets_chat_address(tmp_path):
+    async def scenario():
+        database, campaigns, sessions, access, bot = await setup(tmp_path)
+        bot.get_chat_member = AsyncMock(return_value=SimpleNamespace(status='member'))
+        data = {
+            CAMPAIGN_SERVICE_KEY: campaigns,
+            SESSION_SERVICE_KEY: sessions,
+            ADMIN_ACCESS_KEY: access,
+            WEB_BASE_URL_KEY: '',
+        }
+        context = SimpleNamespace(args=[], application=SimpleNamespace(bot_data=data), bot=bot)
+        update = SimpleNamespace(
+            effective_chat=SimpleNamespace(id=-100, type='group', title='Campaign'),
+            effective_message=SimpleNamespace(id=10),
+            effective_user=SimpleNamespace(id=7),
+        )
+        await web_url(update, context)
+        missing = bot.send_message.await_args.kwargs['text']
+        context.args = ['https://d20.example/']
+        await web_url(update, context)
+        denied = bot.send_message.await_args.kwargs['text']
+        bot.get_chat_member.return_value.status = 'administrator'
+        context.args = ['bad']
+        await web_url(update, context)
+        invalid = bot.send_message.await_args.kwargs['text']
+        context.args = ['https://d20.example/']
+        await web_url(update, context)
+        saved = await sessions.get_web_base_url(-100)
+        context.args = []
+        await web_url(update, context)
+        shown = bot.send_message.await_args.kwargs['text']
+        await admin(update, context)
+        link = bot.send_message.await_args.kwargs['text']
+        await database.close()
+        return missing, denied, invalid, saved, shown, link
+
+    missing, denied, invalid, saved, shown, link = asyncio.run(scenario())
+    assert 'не задан' in missing
+    assert 'только администраторы' in denied
+    assert 'Формат' in invalid
+    assert saved == 'https://d20.example'
+    assert 'https://d20.example' in shown
+    assert 'https://d20.example/login?token=' in link
 
 
 def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):

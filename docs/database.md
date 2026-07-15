@@ -22,7 +22,8 @@ migrations/
 ├── 002_game_schedule.sql
 ├── 003_game_config.sql
 ├── 004_unify_schedules_and_sessions.sql
-└── 005_campaign_master.sql
+├── 005_campaign_master.sql
+└── 006_web_base_url.sql
 ```
 
 Telegram-команды не должны выполнять SQL или собирать бизнес-сценарии

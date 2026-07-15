@@ -1,10 +1,12 @@
+from datetime import UTC, datetime
 from urllib.parse import urlencode
 
 from telegram import Update
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
-from commands.helpers import campaign_service
+from commands.game_utils import valid_url
+from commands.helpers import campaign_service, is_admin, session_service
 from web.access import AdminAccessService, AdminIdentity
 
 ADMIN_ACCESS_KEY = 'admin_access'
@@ -18,11 +20,13 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     if chat is None or message is None or user is None:
         return
-    base_url = context.application.bot_data.get(WEB_BASE_URL_KEY)
+    base_url = await session_service(context).get_web_base_url(
+        chat.id
+    ) or context.application.bot_data.get(WEB_BASE_URL_KEY)
     if not base_url:
         await context.bot.send_message(
             chat_id=chat.id,
-            text='⚠️ Веб-панель не включена. Задайте WEB_BASE_URL.',
+            text='⚠️ Адрес веб-панели не задан. Используйте /web_url.',
             reply_to_message_id=message.id,
         )
         return
@@ -47,3 +51,44 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             text='⚠️ Не удалось отправить ссылку в личные сообщения. Снача откройте диалог с ботом.',
             reply_to_message_id=message.id,
         )
+
+
+async def web_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show or set the web panel URL for this chat."""
+    chat = update.effective_chat
+    message = update.effective_message
+    if chat is None or message is None:
+        return
+    service = session_service(context)
+    if not context.args:
+        value = await service.get_web_base_url(chat.id) or context.application.bot_data.get(
+            WEB_BASE_URL_KEY
+        )
+        text = f'🌐 Адрес панели: {value}' if value else '📭 Адрес панели пока не задан.'
+        await context.bot.send_message(chat_id=chat.id, text=text, reply_to_message_id=message.id)
+        return
+    try:
+        allowed = await is_admin(update, context)
+    except TelegramError:
+        allowed = False
+    if not allowed:
+        await context.bot.send_message(
+            chat_id=chat.id,
+            text='⛔ Менять адрес панели могут только администраторы чата.',
+            reply_to_message_id=message.id,
+        )
+        return
+    if len(context.args) != 1 or not valid_url(context.args[0]):
+        await context.bot.send_message(
+            chat_id=chat.id,
+            text='⚠️ Формат: /web_url https://d20.example',
+            reply_to_message_id=message.id,
+        )
+        return
+    value = context.args[0].rstrip('/')
+    await service.set_web_base_url(chat.id, value, datetime.now(UTC))
+    await context.bot.send_message(
+        chat_id=chat.id,
+        text=f'✅ Адрес панели сохранён: {value}',
+        reply_to_message_id=message.id,
+    )

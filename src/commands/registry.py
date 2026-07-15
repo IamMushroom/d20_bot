@@ -2,7 +2,7 @@ from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from typing import Any
 
-from commands.admin_commands import admin
+from commands.admin_commands import admin, web_url
 from commands.duality_commands import duality
 from commands.game_config_commands import game_url
 from commands.game_schedule_commands import game
@@ -31,6 +31,15 @@ COMMANDS = (
         callback=admin,
         menu_description='открыть панель мастера',
         help_lines=('/admin — получить в личку ссылку на веб-панель',),
+    ),
+    CommandSpec(
+        name='web_url',
+        callback=web_url,
+        menu_description='показать или задать URL панели',
+        help_lines=(
+            '/web_url — показать адрес панели',
+            '/web_url https://d20.example — сохранить адрес (для администраторов)',
+        ),
     ),
     CommandSpec(
         name='master',

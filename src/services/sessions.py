@@ -79,6 +79,12 @@ class SessionService:
     async def set_default_url(self, chat_id: int, foundry_url: str, updated_at: datetime) -> None:
         await self._configs.set_default_url(chat_id, foundry_url, updated_at)
 
+    async def get_web_base_url(self, chat_id: int) -> str | None:
+        return await self._configs.get_web_base_url(chat_id)
+
+    async def set_web_base_url(self, chat_id: int, web_base_url: str, updated_at: datetime) -> None:
+        await self._configs.set_web_base_url(chat_id, web_base_url, updated_at)
+
     async def start(self, chat_id: int, user_id: int, title: str | None) -> SessionStart:
         campaign = await self._campaigns.get_by_chat_id(chat_id)
         if campaign is None or campaign.master_user_id != user_id:
