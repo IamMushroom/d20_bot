@@ -26,8 +26,12 @@ class Session:
     campaign_id: int
     number: int
     title: str | None
-    started_at: datetime
+    scheduled_at: datetime | None
+    started_at: datetime | None
     finished_at: datetime | None
+    foundry_url: str | None
+    message_id: int | None
+    updated_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,13 +42,4 @@ class RecapEntry:
     text: str
     position: int
     created_at: datetime
-    updated_at: datetime
-
-
-@dataclass(frozen=True, slots=True)
-class GameSchedule:
-    chat_id: int
-    scheduled_at: datetime
-    foundry_url: str
-    message_id: int | None
     updated_at: datetime

@@ -14,10 +14,14 @@ src/database/
     ├── campaigns.py
     ├── characters.py
     ├── sessions.py
+    ├── game_configs.py
     └── recaps.py
 
 migrations/
-└── 001_initial_schema.sql
+├── 001_initial_schema.sql
+├── 002_game_schedule.sql
+├── 003_game_config.sql
+└── 004_unify_schedules_and_sessions.sql
 ```
 
 Telegram-команды не должны выполнять SQL напрямую. Ожидаемый поток зависимостей:
@@ -172,11 +176,15 @@ schema_migrations(version, applied_at)
 
 ### Session
 
-Игровая сессия получает последовательный номер внутри кампании. Частичный уникальный индекс разрешает только одну незавершённую сессию на кампанию:
+Игровая сессия получает последовательный номер внутри кампании и является единым
+источником данных как для расписания, так и для истории игр.
 
-```sql
-WHERE finished_at IS NULL
-```
+- planned: заполнено `scheduled_at`, `started_at` отсутствует;
+- active: заполнено `started_at`, `finished_at` отсутствует;
+- finished: заполнено `finished_at`.
+
+Поля `foundry_url` и `message_id` относятся к объявлению planned-сессии. Частичные
+уникальные индексы разрешают только одну planned и одну active-сессию на кампанию.
 
 ### RecapEntry
 
@@ -215,17 +223,25 @@ character = await CharacterRepository(database).register(
 
 ```python
 sessions = SessionRepository(database)
+planned = await sessions.schedule(campaign.id, scheduled_at, foundry_url)
 session = await sessions.start(campaign.id, 'Старая башня')
 await sessions.finish(session.id)
 ```
 
-- `start()` открывает сессию и назначает следующий номер.
+- `schedule()` создаёт planned-сессию или переносит уже существующую.
+- `get_planned()` получает ближайшую запланированную сессию кампании.
+- `set_message_id()` связывает сессию с Telegram-объявлением.
+- `start()` переводит planned-сессию в active; если плана нет, создаёт новую active-сессию.
 - `finish()` завершает активную сессию; повторное завершение возвращает `None`.
 - `get_active()` получает открытую сессию кампании.
 - `get_latest()` получает последнюю сессию независимо от её состояния.
 - `list()` возвращает сессии в порядке номеров.
 
-Попытка открыть вторую активную сессию приводит к `sqlite3.IntegrityError`. Пользовательский слой должен преобразовать её в понятный ответ Telegram.
+Попытка открыть вторую active-сессию приводит к `sqlite3.IntegrityError`. Пользовательский слой должен преобразовать её в понятный ответ Telegram.
+
+Миграция `004_unify_schedules_and_sessions.sql` переносит строки старой таблицы
+`game_schedules` в planned-сессии, сохраняя дату, Foundry URL и Telegram message ID,
+после чего удаляет старую таблицу. Существующие сессии и связанные рекапы сохраняются.
 
 ### RecapRepository
 
@@ -266,6 +282,8 @@ Dev и production запускаются с разными Compose project names
 - полный lifecycle кампании, персонажа, сессии и рекапа;
 - порядок фрагментов;
 - запрет нескольких активных сессий;
+- создание, перенос и запуск planned-сессии;
+- перенос существующего расписания в `sessions` без потери рекапов;
 - инициализация и закрытие базы вместе с приложением.
 
 Запуск:

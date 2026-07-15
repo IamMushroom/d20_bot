@@ -8,8 +8,8 @@ from telegram import Update
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
-from database.models import GameSchedule
-from database.repositories import GameScheduleRepository
+from database.models import Session
+from database.repositories import CampaignRepository, GameConfigRepository, SessionRepository
 
 DATABASE_KEY = 'database'
 USAGE = '⚠️ Формат: /game ДД.ММ.ГГГГ ЧЧ:ММ [https://foundry.example]'
@@ -31,6 +31,7 @@ def _timezone() -> tzinfo:
 def _parse_date(date_text: str, time_text: str, now: datetime) -> datetime:
     timezone = _timezone()
     now = now.astimezone(timezone)
+    date_text = date_text.rstrip('.')
     if date_text.count('.') == 2:
         parsed = datetime.strptime(f'{date_text} {time_text}', '%d.%m.%Y %H:%M')
     else:
@@ -45,12 +46,14 @@ def _valid_url(value: str) -> bool:
     return parsed.scheme in {'http', 'https'} and bool(parsed.netloc)
 
 
-def _message(schedule: GameSchedule) -> str:
-    local = schedule.scheduled_at.astimezone(_timezone())
+def _message(session: Session) -> str:
+    assert session.scheduled_at is not None
+    assert session.foundry_url is not None
+    local = session.scheduled_at.astimezone(_timezone())
     timezone_name = getenv('GAME_TIMEZONE', 'Europe/Moscow')
     return (
         f'🎲 Следующая игра: {local:%d.%m.%Y в %H:%M} ({timezone_name})\n'
-        f'🏰 Foundry: {schedule.foundry_url}'
+        f'🏰 Foundry: {session.foundry_url}'
     )
 
 
@@ -72,10 +75,14 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if chat is None or message is None:
         return
 
-    repository = GameScheduleRepository(context.application.bot_data[DATABASE_KEY])
+    database = context.application.bot_data[DATABASE_KEY]
+    campaigns = CampaignRepository(database)
+    sessions = SessionRepository(database)
+    configs = GameConfigRepository(database)
     if not context.args:
-        schedule = await repository.get(chat.id)
-        text = _message(schedule) if schedule else '📅 Следующая игра пока не назначена.'
+        campaign = await campaigns.get_by_chat_id(chat.id)
+        session = await sessions.get_planned(campaign.id) if campaign is not None else None
+        text = _message(session) if session else '📅 Следующая игра пока не назначена.'
         await context.bot.send_message(chat_id=chat.id, text=text, reply_to_message_id=message.id)
         return
 
@@ -94,7 +101,7 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if len(context.args) not in {2, 3}:
         await context.bot.send_message(chat_id=chat.id, text=USAGE, reply_to_message_id=message.id)
         return
-    default_url = await repository.get_default_url(chat.id)
+    default_url = await configs.get_default_url(chat.id)
     foundry_url = (
         context.args[2] if len(context.args) == 3 else default_url or getenv('FOUNDRY_URL', '')
     )
@@ -113,17 +120,11 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await context.bot.send_message(chat_id=chat.id, text=USAGE, reply_to_message_id=message.id)
         return
 
-    previous = await repository.get(chat.id)
-    schedule = GameSchedule(
-        chat_id=chat.id,
-        scheduled_at=scheduled_at,
-        foundry_url=foundry_url,
-        message_id=None,
-        updated_at=datetime.now(UTC),
-    )
-    schedule = await repository.save(schedule)
-    announcement = await context.bot.send_message(chat_id=chat.id, text=_message(schedule))
-    await repository.set_message_id(chat.id, announcement.id)
+    campaign = await campaigns.get_or_create(chat.id, getattr(chat, 'title', None))
+    previous = await sessions.get_planned(campaign.id)
+    session = await sessions.schedule(campaign.id, scheduled_at, foundry_url)
+    announcement = await context.bot.send_message(chat_id=chat.id, text=_message(session))
+    await sessions.set_message_id(session.id, announcement.id)
 
     try:
         await context.bot.pin_chat_message(
@@ -150,7 +151,7 @@ async def game_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if chat is None or message is None:
         return
 
-    repository = GameScheduleRepository(context.application.bot_data[DATABASE_KEY])
+    repository = GameConfigRepository(context.application.bot_data[DATABASE_KEY])
     if not context.args:
         foundry_url = await repository.get_default_url(chat.id) or getenv('FOUNDRY_URL', '')
         text = (

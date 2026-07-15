@@ -1,5 +1,6 @@
 import asyncio
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -39,7 +40,68 @@ def test_migrations_are_idempotent(tmp_path):
         await database.close()
         return rows
 
-    assert asyncio.run(scenario()) == [{'version': 1}, {'version': 2}, {'version': 3}]
+    assert asyncio.run(scenario()) == [
+        {'version': 1},
+        {'version': 2},
+        {'version': 3},
+        {'version': 4},
+    ]
+
+
+def test_schedule_migration_preserves_sessions_recaps_and_planned_game(tmp_path):
+    async def scenario():
+        migration_dir = tmp_path / 'migrations'
+        migration_dir.mkdir()
+        for version in range(1, 4):
+            source = next(MIGRATIONS.glob(f'{version:03}_*.sql'))
+            (migration_dir / source.name).write_text(source.read_text(encoding='utf-8'))
+
+        database = await SQLiteDatabase.connect(str(tmp_path / 'upgrade.sqlite3'))
+        await apply_migrations(database, migration_dir)
+        campaign = await CampaignRepository(database).get_or_create(-100, 'Campaign')
+        character = await CharacterRepository(database).register(campaign.id, 42, 'Tilly')
+        session = await database.fetch_one(
+            """INSERT INTO sessions (campaign_id, number, title, started_at)
+            VALUES (?, 1, ?, ?) RETURNING *""",
+            (campaign.id, 'Old session', '2026-07-10T16:00:00+00:00'),
+        )
+        assert session is not None
+        session_id = int(session['id'])
+        await RecapRepository(database).add(session_id, character.id, 'Still here.')
+        await database.execute(
+            """INSERT INTO game_schedules
+            (chat_id, scheduled_at, foundry_url, message_id, updated_at)
+            VALUES (?, ?, ?, ?, ?)""",
+            (
+                -100,
+                '2026-07-20T16:00:00+00:00',
+                'https://foundry.example',
+                123,
+                '2026-07-15T12:00:00+00:00',
+            ),
+        )
+
+        source = next(MIGRATIONS.glob('004_*.sql'))
+        (migration_dir / source.name).write_text(source.read_text(encoding='utf-8'))
+        await apply_migrations(database, migration_dir)
+
+        sessions = await SessionRepository(database).list(campaign.id)
+        recaps = await RecapRepository(database).list_by_session(session_id)
+        old_table = await database.fetch_one(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'game_schedules'"
+        )
+        await database.close()
+        return sessions, recaps, old_table
+
+    sessions, recaps, old_table = asyncio.run(scenario())
+    assert len(sessions) == 2
+    assert sessions[0].started_at is not None
+    assert sessions[1].scheduled_at == datetime.fromisoformat('2026-07-20T16:00:00+00:00')
+    assert sessions[1].started_at is None
+    assert sessions[1].foundry_url == 'https://foundry.example'
+    assert sessions[1].message_id == 123
+    assert recaps[0].text == 'Still here.'
+    assert old_table is None
 
 
 def test_invalid_migration_filename_is_rejected(tmp_path):
@@ -121,3 +183,41 @@ def test_only_one_active_session_is_allowed(tmp_path):
 
     with pytest.raises(sqlite3.IntegrityError):
         asyncio.run(scenario())
+
+
+def test_planned_session_is_rescheduled_then_started(tmp_path):
+    async def scenario():
+        database = await open_database(tmp_path)
+        campaign = await CampaignRepository(database).get_or_create(1)
+        sessions = SessionRepository(database)
+        first = await sessions.schedule(
+            campaign.id,
+            datetime.fromisoformat('2026-07-20T16:00:00+00:00'),
+            'https://foundry.example/first',
+        )
+        rescheduled = await sessions.schedule(
+            campaign.id,
+            datetime.fromisoformat('2026-07-27T16:00:00+00:00'),
+            'https://foundry.example/second',
+        )
+        started = await sessions.start(campaign.id, 'Session title')
+        result = (
+            first,
+            rescheduled,
+            started,
+            await sessions.get_planned(campaign.id),
+            await sessions.get_active(campaign.id),
+            await sessions.list(campaign.id),
+        )
+        await database.close()
+        return result
+
+    first, rescheduled, started, planned, active, all_sessions = asyncio.run(scenario())
+    assert rescheduled.id == first.id == started.id
+    assert rescheduled.number == 1
+    assert rescheduled.foundry_url == 'https://foundry.example/second'
+    assert started.title == 'Session title'
+    assert started.started_at is not None
+    assert planned is None
+    assert active == started
+    assert all_sessions == [started]
