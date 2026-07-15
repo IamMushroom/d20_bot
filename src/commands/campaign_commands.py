@@ -27,9 +27,18 @@ async def _set_tag(
 ) -> bool:
     try:
         await context.bot.set_chat_member_tag(chat_id=chat_id, user_id=user_id, tag=tag)
-    except TelegramError:
+    except TelegramError as error:
         logging.warning(
-            'Could not set chat member tag', extra={'chat_id': chat_id, 'user_id': user_id}
+            'Could not set chat member tag',
+            extra={
+                'chat_id': chat_id,
+                'user_id': user_id,
+                'telegram_method': 'setChatMemberTag',
+                'error_type': type(error).__name__,
+                'error_message': str(error),
+                'tag': tag,
+            },
+            exc_info=True,
         )
         return False
     return True

@@ -21,6 +21,10 @@ def test_json_formatter_produces_valid_structured_log():
     record.command = 'roll'
     record.argument = '1d20 + "4"'
     record.timer_id = '123:456'
+    record.telegram_method = 'setChatMemberTag'
+    record.error_type = 'BadRequest'
+    record.error_message = 'Chat member is an administrator'
+    record.tag = 'Мастер'
 
     payload = json.loads(JsonFormatter().format(record))
 
@@ -31,6 +35,10 @@ def test_json_formatter_produces_valid_structured_log():
     assert payload['command'] == 'roll'
     assert payload['argument'] == '1d20 + "4"'
     assert payload['timer_id'] == '123:456'
+    assert payload['telegram_method'] == 'setChatMemberTag'
+    assert payload['error_type'] == 'BadRequest'
+    assert payload['error_message'] == 'Chat member is an administrator'
+    assert payload['tag'] == 'Мастер'
     assert payload['datetime'].endswith('+00:00')
 
 

@@ -73,7 +73,7 @@ def test_master_player_and_session_lifecycle(tmp_path):
     assert 'завершена' in bot.send_message.await_args.kwargs['text']
 
 
-def test_role_and_session_validation_messages(tmp_path):
+def test_role_and_session_validation_messages(tmp_path, caplog):
     async def scenario():
         database = await SQLiteDatabase.connect(str(tmp_path / 'validation.sqlite3'))
         await apply_migrations(database, MIGRATIONS)
@@ -106,12 +106,21 @@ def test_role_and_session_validation_messages(tmp_path):
         await database.close()
         return non_admin_text, invalid_player_text, non_master_text, tag_warning, no_active_text
 
-    messages = asyncio.run(scenario())
+    with caplog.at_level('WARNING'):
+        messages = asyncio.run(scenario())
     assert 'администраторы' in messages[0]
     assert 'до 16' in messages[1]
     assert 'назначенный мастер' in messages[2]
     assert 'тег установить не удалось' in messages[3]
     assert 'Активной сессии' in messages[4]
+    tag_record = next(
+        record for record in caplog.records if getattr(record, 'telegram_method', None)
+    )
+    assert tag_record.telegram_method == 'setChatMemberTag'
+    assert tag_record.error_type == 'BadRequest'
+    assert tag_record.error_message == 'no rights'
+    assert tag_record.tag == 'Мастер'
+    assert tag_record.exc_info is not None
 
 
 def test_master_rejects_bot_selected_by_reply(tmp_path):

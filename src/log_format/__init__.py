@@ -14,6 +14,10 @@ EXTRA_FIELDS = (
     'timer_id',
     'duration_ms',
     'status',
+    'telegram_method',
+    'error_type',
+    'error_message',
+    'tag',
 )
 LOG_CONTEXT: ContextVar[dict | None] = ContextVar('log_context', default=None)
 
