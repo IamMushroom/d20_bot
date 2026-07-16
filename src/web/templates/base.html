@@ -46,6 +46,9 @@
       .nav-link { color: var(--muted); text-decoration: none; font-size: .92rem; }
       .nav-link:hover { color: var(--text); }
       .header-actions { display: flex; align-items: center; gap: .75rem; }
+      .nav-form { display: block; }
+      .nav-button { width: auto; min-height: auto; padding: 0; border-radius: 0; background: none; color: var(--muted); font-size: .92rem; font-weight: 400; }
+      .nav-button:hover { color: var(--text); filter: none; }
       .theme-switcher { display: flex; padding: .2rem; border: 1px solid var(--border); border-radius: .7rem; background: var(--surface); }
       .theme-switcher button { width: auto; min-height: 2rem; padding: .3rem .5rem; border-radius: .5rem; background: transparent; color: var(--muted); font-size: .85rem; }
       .theme-switcher button[aria-pressed="true"] { background: var(--surface-raised); color: var(--text); box-shadow: 0 2px 8px rgba(0, 0, 0, .12); }
@@ -110,6 +113,12 @@
         <div class="header-actions">
           <a class="nav-link" href="/">Панель кампании</a>
           <a class="nav-link" href="/settings">Настройки</a>
+          {% if csrf_token|default(None) %}
+            <form class="nav-form" method="post" action="/logout">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="nav-button" type="submit">Выйти</button>
+            </form>
+          {% endif %}
           <div class="theme-switcher" aria-label="Тема оформления">
             <button type="button" data-theme-choice="auto" title="Системная тема">◐</button>
             <button type="button" data-theme-choice="light" title="Светлая тема">☀</button>

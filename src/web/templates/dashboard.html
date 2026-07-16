@@ -30,10 +30,12 @@
       {% if active %}
         <p><strong>Активная сессия №{{ active.number }}</strong>{% if active.title %}<br><span class="muted">{{ active.title }}</span>{% endif %}</p>
         <form method="post" action="/session/stop" data-confirm="Точно завершить текущую сессию?">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <button class="button--danger" type="submit">⏹️ Завершить сессию</button>
         </form>
       {% else %}
         <form method="post" action="/session/start">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <label>Название сессии <input name="title" maxlength="100" placeholder="Например, Башня мага"></label>
           <button type="submit">▶️ Начать сессию</button>
         </form>
@@ -81,6 +83,7 @@
     <section class="card card--wide">
       <div class="card__header"><h2>Изменить расписание</h2></div>
       <form class="form-grid" method="post" action="/schedule" data-local-schedule>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <label>Дата <input required type="text" inputmode="numeric" name="local_date" placeholder="20.07.2026" pattern="\d{2}\.\d{2}\.\d{4}"></label>
         <label>Время <input required type="text" inputmode="numeric" name="local_time" placeholder="19:30" pattern="(?:[01]\d|2[0-3]):[0-5]\d"></label>
         <input type="hidden" name="scheduled_at">

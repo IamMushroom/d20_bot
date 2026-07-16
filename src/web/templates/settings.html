@@ -13,6 +13,7 @@
     <section class="card card--wide">
       <div class="card__header"><h2>Кампания</h2></div>
       <form method="post" action="/settings">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <label>Название кампании
           <input required name="title" maxlength="100" value="{{ title }}">
         </label>

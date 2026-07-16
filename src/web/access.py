@@ -13,7 +13,7 @@ class AdminIdentity:
 class AdminAccessService:
     def __init__(self) -> None:
         self._logins: dict[str, tuple[AdminIdentity, datetime]] = {}
-        self._sessions: dict[str, tuple[AdminIdentity, datetime]] = {}
+        self._sessions: dict[str, tuple[AdminIdentity, datetime, str]] = {}
 
     def create_login(self, identity: AdminIdentity) -> str:
         self._purge()
@@ -27,13 +27,26 @@ class AdminAccessService:
         if login is None:
             return None
         session_id = secrets.token_urlsafe(32)
-        self._sessions[session_id] = (login[0], datetime.now(UTC) + timedelta(hours=8))
+        self._sessions[session_id] = (
+            login[0],
+            datetime.now(UTC) + timedelta(hours=8),
+            secrets.token_urlsafe(32),
+        )
         return session_id
 
     def authenticate(self, session_id: str | None) -> AdminIdentity | None:
         self._purge()
         session = self._sessions.get(session_id or '')
         return session[0] if session is not None else None
+
+    def csrf_token(self, session_id: str | None) -> str | None:
+        self._purge()
+        session = self._sessions.get(session_id or '')
+        return session[2] if session is not None else None
+
+    def revoke(self, session_id: str | None) -> None:
+        if session_id is not None:
+            self._sessions.pop(session_id, None)
 
     def _purge(self) -> None:
         now = datetime.now(UTC)

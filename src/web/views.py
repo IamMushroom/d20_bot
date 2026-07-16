@@ -40,6 +40,7 @@ def dashboard_response(
     default_url: str,
     history: list[Session] | None = None,
     announcement_timezone: str = 'Europe/Moscow',
+    csrf_token: str = '',
 ) -> tuple[HTTPStatus, dict[str, str], bytes]:
     document = TEMPLATES.get_template('dashboard.html').render(
         title=(roster.campaign.title if roster and roster.campaign.title else None)
@@ -50,17 +51,19 @@ def dashboard_response(
         roster=roster,
         default_url=default_url,
         history=history or [],
+        csrf_token=csrf_token,
     )
     return HTTPStatus.OK, {}, document.encode()
 
 
 def settings_response(
-    title: str, default_url: str, announcement_timezone: str
+    title: str, default_url: str, announcement_timezone: str, csrf_token: str = ''
 ) -> tuple[HTTPStatus, dict[str, str], bytes]:
     document = TEMPLATES.get_template('settings.html').render(
         title=title,
         default_url=default_url,
         announcement_timezone=announcement_timezone,
         timezones=ANNOUNCEMENT_TIMEZONES,
+        csrf_token=csrf_token,
     )
     return HTTPStatus.OK, {}, document.encode()

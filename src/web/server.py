@@ -146,19 +146,38 @@ class AdminWebServer:
                 cookie += '; Secure'
             return HTTPStatus.SEE_OTHER, {'Location': '/', 'Set-Cookie': cookie}, b''
 
-        identity = self._access.authenticate(self._cookie(headers, 'd20_admin'))
+        session_id = self._cookie(headers, 'd20_admin')
+        identity = self._access.authenticate(session_id)
         if identity is None:
             return page_response(HTTPStatus.UNAUTHORIZED, 'Запросите новую ссылку командой /admin.')
+        form = parse_qs(body.decode()) if method == 'POST' else {}
+        if method == 'POST':
+            expected = self._access.csrf_token(session_id)
+            supplied = form.get('csrf_token', [''])[0]
+            if expected is None or not secrets.compare_digest(expected, supplied):
+                return page_response(
+                    HTTPStatus.FORBIDDEN, 'Проверка безопасности формы не пройдена.'
+                )
+        if method == 'POST' and url.path == '/logout':
+            self._access.revoke(session_id)
+            return (
+                HTTPStatus.SEE_OTHER,
+                {
+                    'Location': '/',
+                    'Set-Cookie': 'd20_admin=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0',
+                },
+                b'',
+            )
         if method == 'GET' and url.path == '/':
-            return await self._dashboard(identity)
+            return await self._dashboard(identity, session_id)
         if method == 'GET' and url.path == '/settings':
-            return await self._settings(identity)
+            return await self._settings(identity, session_id)
         if method == 'POST' and url.path == '/settings':
-            return await self._save_settings(identity, parse_qs(body.decode()))
+            return await self._save_settings(identity, form)
         if method == 'POST' and url.path == '/schedule':
-            return await self._schedule(identity, parse_qs(body.decode()))
+            return await self._schedule(identity, form)
         if method == 'POST' and url.path == '/session/start':
-            return await self._start_session(identity, parse_qs(body.decode()))
+            return await self._start_session(identity, form)
         if method == 'POST' and url.path == '/session/stop':
             return await self._stop_session(identity)
         return page_response(HTTPStatus.NOT_FOUND, 'Страница не найдена.')
@@ -385,7 +404,9 @@ class AdminWebServer:
             supplied_token, self._internal_token
         )
 
-    async def _dashboard(self, identity: AdminIdentity) -> tuple[HTTPStatus, dict[str, str], bytes]:
+    async def _dashboard(
+        self, identity: AdminIdentity, session_id: str
+    ) -> tuple[HTTPStatus, dict[str, str], bytes]:
         session = await self._sessions.get_planned(identity.chat_id)
         active = await self._sessions.get_active(identity.chat_id)
         history = await self._sessions.get_history(identity.chat_id)
@@ -395,7 +416,14 @@ class AdminWebServer:
         )
         timezone_name = await self._sessions.get_announcement_timezone(identity.chat_id)
         return dashboard_response(
-            identity, session, active, roster, default_url, history, timezone_name
+            identity,
+            session,
+            active,
+            roster,
+            default_url,
+            history,
+            timezone_name,
+            self._access.csrf_token(session_id) or '',
         )
 
     async def _schedule(
@@ -428,7 +456,9 @@ class AdminWebServer:
         )
         return HTTPStatus.SEE_OTHER, {'Location': '/'}, b''
 
-    async def _settings(self, identity: AdminIdentity) -> tuple[HTTPStatus, dict[str, str], bytes]:
+    async def _settings(
+        self, identity: AdminIdentity, session_id: str
+    ) -> tuple[HTTPStatus, dict[str, str], bytes]:
         roster = await self._campaigns.get_roster(identity.chat_id)
         title = (
             roster.campaign.title if roster and roster.campaign.title else identity.chat_title or ''
@@ -437,7 +467,9 @@ class AdminWebServer:
             'D20_BOT_FOUNDRY_URL', ''
         )
         timezone_name = await self._sessions.get_announcement_timezone(identity.chat_id)
-        return settings_response(title, default_url, timezone_name)
+        return settings_response(
+            title, default_url, timezone_name, self._access.csrf_token(session_id) or ''
+        )
 
     async def _save_settings(
         self, identity: AdminIdentity, form: Mapping[str, list[str]]

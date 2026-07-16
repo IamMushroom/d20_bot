@@ -43,6 +43,13 @@ async def setup(tmp_path):
     return database, campaigns, sessions, access, bot
 
 
+def csrf_body(access, headers, body=b''):
+    session_id = headers['cookie'].split('=', 1)[1]
+    token = access.csrf_token(session_id)
+    assert token is not None
+    return body + (b'&' if body else b'') + f'csrf_token={token}'.encode()
+
+
 def test_admin_access_uses_one_time_logins_and_expiring_sessions():
     access = AdminAccessService()
     identity = AdminIdentity(-100, 7, 'Campaign')
@@ -321,19 +328,30 @@ def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
         headers = {'cookie': cookie}
         dashboard = await server._route('GET', '/', headers, b'')
         bad_date = await server._route(
-            'POST', '/schedule', headers, b'scheduled_at=nope&foundry_url=https%3A%2F%2Fx.test'
+            'POST',
+            '/schedule',
+            headers,
+            csrf_body(access, headers, b'scheduled_at=nope&foundry_url=https%3A%2F%2Fx.test'),
         )
         bad_url = await server._route(
             'POST',
             '/schedule',
             headers,
-            b'scheduled_at=2026-07-20T19%3A00%2B00%3A00&foundry_url=nope',
+            csrf_body(
+                access,
+                headers,
+                b'scheduled_at=2026-07-20T19%3A00%2B00%3A00&foundry_url=nope',
+            ),
         )
         scheduled = await server._route(
             'POST',
             '/schedule',
             headers,
-            b'scheduled_at=2026-07-20T19%3A00%2B00%3A00&foundry_url=https%3A%2F%2Ffoundry.test',
+            csrf_body(
+                access,
+                headers,
+                b'scheduled_at=2026-07-20T19%3A00%2B00%3A00&foundry_url=https%3A%2F%2Ffoundry.test',
+            ),
         )
         updated = await server._route('GET', '/', headers, b'')
         missing = await server._route('GET', '/missing', headers, b'')
@@ -394,13 +412,21 @@ def test_web_campaign_settings(tmp_path):
             'POST',
             '/settings',
             headers,
-            b'title=New&foundry_url=nope&announcement_timezone=Moon%2FBase',
+            csrf_body(
+                access,
+                headers,
+                b'title=New&foundry_url=nope&announcement_timezone=Moon%2FBase',
+            ),
         )
         saved = await server._route(
             'POST',
             '/settings',
             headers,
-            b'title=New+Campaign&foundry_url=https%3A%2F%2Fvtt.example&announcement_timezone=Asia%2FYerevan',
+            csrf_body(
+                access,
+                headers,
+                b'title=New+Campaign&foundry_url=https%3A%2F%2Fvtt.example&announcement_timezone=Asia%2FYerevan',
+            ),
         )
         dashboard = await server._route('GET', '/', headers, b'')
         roster = await campaigns.get_roster(-100)
@@ -419,6 +445,27 @@ def test_web_campaign_settings(tmp_path):
     assert roster is not None and roster.campaign.title == 'New Campaign'
     assert config == ('https://vtt.example', 'Asia/Yerevan')
     assert b'New Campaign' in dashboard[2]
+
+
+def test_web_rejects_invalid_csrf_and_logs_out(tmp_path):
+    async def scenario():
+        database, campaigns, sessions, access, bot = await setup(tmp_path)
+        server = AdminWebServer(access, campaigns, sessions, bot)
+        token = access.create_login(AdminIdentity(-100, 7, 'Campaign'))
+        login = await server._route('GET', f'/login?token={token}', {}, b'')
+        headers = {'cookie': login[1]['Set-Cookie'].split(';', 1)[0]}
+
+        rejected = await server._route('POST', '/session/start', headers, b'csrf_token=forged')
+        logout = await server._route('POST', '/logout', headers, csrf_body(access, headers))
+        after = await server._route('GET', '/', headers, b'')
+        await database.close()
+        return rejected, logout, after
+
+    rejected, logout, after = asyncio.run(scenario())
+    assert rejected[0] is HTTPStatus.FORBIDDEN
+    assert logout[0] is HTTPStatus.SEE_OTHER
+    assert 'Max-Age=0' in logout[1]['Set-Cookie']
+    assert after[0] is HTTPStatus.UNAUTHORIZED
 
 
 def test_internal_api_issues_admin_link_for_master(tmp_path):
@@ -691,17 +738,30 @@ def test_web_session_lifecycle(tmp_path):
         headers = {'cookie': login[1]['Set-Cookie'].split(';', 1)[0]}
 
         too_long = await server._route(
-            'POST', '/session/start', headers, f'title={"x" * 101}'.encode()
+            'POST',
+            '/session/start',
+            headers,
+            csrf_body(access, headers, f'title={"x" * 101}'.encode()),
         )
-        started = await server._route('POST', '/session/start', headers, 'title=Башня'.encode())
+        started = await server._route(
+            'POST', '/session/start', headers, csrf_body(access, headers, 'title=Башня'.encode())
+        )
         active_page = await server._route('GET', '/', headers, b'')
-        duplicate = await server._route('POST', '/session/start', headers, b'')
-        stopped = await server._route('POST', '/session/stop', headers, b'')
-        second_stop = await server._route('POST', '/session/stop', headers, b'')
+        duplicate = await server._route(
+            'POST', '/session/start', headers, csrf_body(access, headers)
+        )
+        stopped = await server._route('POST', '/session/stop', headers, csrf_body(access, headers))
+        second_stop = await server._route(
+            'POST', '/session/stop', headers, csrf_body(access, headers)
+        )
         active = await sessions.get_active(-100)
         await campaigns.assign_master(-100, 8, 'Campaign')
-        forbidden_start = await server._route('POST', '/session/start', headers, b'')
-        forbidden_stop = await server._route('POST', '/session/stop', headers, b'')
+        forbidden_start = await server._route(
+            'POST', '/session/start', headers, csrf_body(access, headers)
+        )
+        forbidden_stop = await server._route(
+            'POST', '/session/stop', headers, csrf_body(access, headers)
+        )
         await database.close()
         return (
             too_long,
