@@ -62,6 +62,20 @@
       {% endif %}
     </section>
 
+    {% if role == 'master' %}<section class="card card--wide">
+      <div class="card__header"><h2>Изменить расписание</h2></div>
+      <form class="form-grid" method="post" action="/schedule" data-local-schedule>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="chat_id" value="{{ campaign_chat_id }}">
+        <label>Дата <input required type="text" inputmode="numeric" name="local_date" placeholder="20.07.2026" pattern="\d{2}\.\d{2}\.\d{4}"></label>
+        <label>Время <input required type="text" inputmode="numeric" name="local_time" placeholder="19:30" pattern="(?:[01]\d|2[0-3]):[0-5]\d"></label>
+        <input type="hidden" name="scheduled_at">
+        <label>Foundry URL <input required type="url" name="foundry_url" value="{{ default_url }}" placeholder="https://foundry.example"></label>
+        <button type="submit">Сохранить и опубликовать</button>
+      </form>
+      <p class="muted" data-browser-timezone></p>
+    </section>
+
     <section class="card card--wide">
       <div class="card__header">
         <h2>Прошлые игры</h2>
@@ -82,20 +96,6 @@
       {% else %}
         <div class="empty">Завершённых игр пока нет.</div>
       {% endif %}
-    </section>
-
-    {% if role == 'master' %}<section class="card card--wide">
-      <div class="card__header"><h2>Изменить расписание</h2></div>
-      <form class="form-grid" method="post" action="/schedule" data-local-schedule>
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <input type="hidden" name="chat_id" value="{{ campaign_chat_id }}">
-        <label>Дата <input required type="text" inputmode="numeric" name="local_date" placeholder="20.07.2026" pattern="\d{2}\.\d{2}\.\d{4}"></label>
-        <label>Время <input required type="text" inputmode="numeric" name="local_time" placeholder="19:30" pattern="(?:[01]\d|2[0-3]):[0-5]\d"></label>
-        <input type="hidden" name="scheduled_at">
-        <label>Foundry URL <input required type="url" name="foundry_url" value="{{ default_url }}" placeholder="https://foundry.example"></label>
-        <button type="submit">Сохранить и опубликовать</button>
-      </form>
-      <p class="muted" data-browser-timezone></p>
     </section>
     {% endif %}
   </div>

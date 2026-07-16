@@ -30,6 +30,7 @@ from web.access import AdminAccessService, AdminIdentity
 from web.views import (
     campaigns_response,
     dashboard_response,
+    landing_response,
     login_response,
     page_response,
     sessions_response,
@@ -207,6 +208,8 @@ class AdminWebServer:
         session_id = self._cookie(headers, 'd20_admin')
         identity = await self._access.authenticate(session_id)
         if identity is None:
+            if method == 'GET' and url.path == '/':
+                return landing_response()
             return page_response(HTTPStatus.UNAUTHORIZED, 'Запросите новую ссылку командой /admin.')
         form = parse_qs(body.decode()) if method == 'POST' else {}
         if method == 'POST':

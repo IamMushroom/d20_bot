@@ -487,7 +487,7 @@ def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
 
         health = await server._route('GET', '/health', {}, b'')
         javascript = await server._route('GET', '/static/app.js', {}, b'')
-        unauthorized = await server._route('GET', '/', {}, b'')
+        landing = await server._route('GET', '/', {}, b'')
         login = await server._route('GET', f'/login?token={token}', {}, b'')
         secure_token = await access.create_login(identity)
         secure_login = await server._route(
@@ -534,7 +534,7 @@ def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
         return (
             health,
             javascript,
-            unauthorized,
+            landing,
             login,
             secure_login,
             repeated,
@@ -557,7 +557,8 @@ def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
     assert results[1][0] is HTTPStatus.OK
     assert results[1][1]['Content-Type'] == 'text/javascript; charset=utf-8'
     assert b'applyTheme' in results[1][2]
-    assert results[2][0] is HTTPStatus.UNAUTHORIZED
+    assert results[2][0] is HTTPStatus.OK
+    assert b'/login' in results[2][2] and b'/register' in results[2][2]
     assert results[3][0] is HTTPStatus.SEE_OTHER
     assert 'Secure' not in results[3][1]['Set-Cookie']
     assert 'Secure' in results[4][1]['Set-Cookie']
@@ -631,7 +632,7 @@ def test_web_rejects_invalid_csrf_and_logs_out(tmp_path):
 
         rejected = await server._route('POST', '/session/start', headers, b'csrf_token=forged')
         logout = await server._route('POST', '/logout', headers, await csrf_body(access, headers))
-        after = await server._route('GET', '/', headers, b'')
+        after = await server._route('GET', '/campaigns', headers, b'')
         await database.close()
         return rejected, logout, after
 
@@ -678,6 +679,33 @@ def test_web_lists_and_revokes_active_sessions(tmp_path):
     assert revoked == (HTTPStatus.SEE_OTHER, {'Location': '/sessions'}, b'')
     assert len(remaining) == 1 and remaining[0].current
     assert foreign
+
+
+def test_expired_login_and_revoked_session_cannot_be_used(tmp_path):
+    async def scenario():
+        database, campaigns, sessions, access, bot = await setup(tmp_path)
+        server = AdminWebServer(access, campaigns, sessions, bot)
+        identity = AdminIdentity(-100, 7, 'Campaign')
+
+        expired_token = await access.create_login(identity)
+        await database.execute(
+            'UPDATE web_login_tokens SET expires_at = ?',
+            ((datetime.now(UTC) - timedelta(seconds=1)).isoformat(),),
+        )
+        expired_login = await server._route('GET', f'/login?token={expired_token}', {}, b'')
+
+        token = await access.create_login(identity)
+        login = await server._route('GET', f'/login?token={token}', {}, b'')
+        cookie = login[1]['Set-Cookie'].split(';', 1)[0]
+        session_id = cookie.split('=', 1)[1]
+        await access.revoke(session_id)
+        after_revoke = await server._route('GET', '/campaigns', {'cookie': cookie}, b'')
+        await database.close()
+        return expired_login, after_revoke
+
+    expired_login, after_revoke = asyncio.run(scenario())
+    assert expired_login[0] is HTTPStatus.UNAUTHORIZED
+    assert after_revoke[0] is HTTPStatus.UNAUTHORIZED
 
 
 def test_web_user_can_switch_between_campaign_roles(tmp_path):
@@ -1113,7 +1141,8 @@ def test_web_server_handles_http_response(tmp_path):
         return writer
 
     writer = asyncio.run(scenario())
-    assert writer.data.startswith(b'HTTP/1.1 401 Unauthorized')
+    assert writer.data.startswith(b'HTTP/1.1 200 OK')
+    assert b'/login' in writer.data and b'/register' in writer.data
     assert b'Content-Security-Policy' in writer.data
     assert writer.closed
 

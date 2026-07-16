@@ -90,11 +90,25 @@
       .campaign-link { display: grid; gap: .55rem; color: var(--text); text-decoration: none; }
       .campaign-link h2 { margin: 0; }
       .campaign-link:hover { border-color: var(--accent); transform: translateY(-1px); }
+      .landing { display: grid; align-items: center; gap: 2rem; min-height: calc(100vh - 11rem); }
+      .landing__copy { max-width: 42rem; }
+      .landing__lead { max-width: 38rem; font-size: clamp(1.05rem, 2.5vw, 1.25rem); line-height: 1.65; }
+      .landing__actions { display: flex; flex-wrap: wrap; gap: .75rem; margin: 1.5rem 0 1rem; }
+      .landing__hint { max-width: 35rem; font-size: .9rem; }
+      .landing__features { display: grid; gap: 1rem; }
+      .landing__features .card { box-shadow: none; }
+      .landing__features h2 { margin: .65rem 0 .4rem; }
+      .landing__features p { margin-bottom: 0; line-height: 1.5; }
+      .feature-icon { color: var(--accent-strong); font-size: 1.6rem; }
+      .button-link { display: inline-flex; align-items: center; justify-content: center; min-height: 2.8rem; padding: .72rem 1.2rem; border-radius: .75rem; background: linear-gradient(135deg, var(--accent), #8060df); color: #130d22; font-weight: 800; text-decoration: none; }
+      .button-link--secondary { border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+      .button-link:hover { filter: brightness(1.08); }
       @media (min-width: 48rem) {
         .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .card--wide { grid-column: 1 / -1; }
         .form-grid { grid-template-columns: 1fr 1.35fr; align-items: end; }
         .form-grid button { grid-column: 1 / -1; width: auto; justify-self: end; min-width: 14rem; }
+        .landing { grid-template-columns: minmax(0, 1.35fr) minmax(18rem, .65fr); }
       }
       @media (prefers-reduced-motion: no-preference) {
         button, input, a { transition: color .16s ease, border-color .16s ease, box-shadow .16s ease, filter .16s ease; }
@@ -114,13 +128,13 @@
       <div class="site-header__inner">
         <a class="brand" href="/"><span class="brand__mark">20</span><span>D20 Control</span></a>
         <div class="header-actions">
-          <a class="nav-link" href="/campaigns">Кампании</a>
-          {% if campaign_chat_id|default(None) %}
-            <a class="nav-link" href="/?campaign={{ campaign_chat_id }}">Панель</a>
-            {% if role|default('master') == 'master' %}<a class="nav-link" href="/settings?campaign={{ campaign_chat_id }}">Настройки</a>{% endif %}
-          {% endif %}
-          <a class="nav-link" href="/sessions">Сессии</a>
           {% if csrf_token|default(None) %}
+            <a class="nav-link" href="/campaigns">Кампании</a>
+            {% if campaign_chat_id|default(None) %}
+              <a class="nav-link" href="/?campaign={{ campaign_chat_id }}">Панель</a>
+              {% if role|default('master') == 'master' %}<a class="nav-link" href="/settings?campaign={{ campaign_chat_id }}">Настройки</a>{% endif %}
+            {% endif %}
+            <a class="nav-link" href="/sessions">Сессии</a>
             <form class="nav-form" method="post" action="/logout">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <button class="nav-button" type="submit">Выйти</button>

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}D20 Control — панель кампаний{% endblock %}
+
+{% block content %}
+  <section class="landing">
+    <div class="landing__copy">
+      <p class="eyebrow">Панель настольных кампаний</p>
+      <h1>Игры, расписание и персонажи — в одном месте</h1>
+      <p class="landing__lead muted">
+        D20 Control дополняет Telegram-бота: игроки видят свои кампании и ближайшие игры,
+        а мастера управляют расписанием и игровыми сессиями.
+      </p>
+      <div class="landing__actions">
+        <a class="button-link" href="/login">Войти</a>
+        <a class="button-link button-link--secondary" href="/register">Регистрация</a>
+      </div>
+      <p class="landing__hint muted">
+        Для регистрации сначала получите одноразовый код командой
+        <code>/web_register</code> у Telegram-бота.
+      </p>
+    </div>
+    <div class="landing__features" aria-label="Возможности панели">
+      <article class="card">
+        <span class="feature-icon">◷</span>
+        <h2>Расписание</h2>
+        <p class="muted">Следующая игра, часовой пояс и история завершённых сессий.</p>
+      </article>
+      <article class="card">
+        <span class="feature-icon">♙</span>
+        <h2>Кампании и роли</h2>
+        <p class="muted">Один аккаунт для всех кампаний — с отдельной ролью в каждой.</p>
+      </article>
+    </div>
+  </section>
+{% endblock %}

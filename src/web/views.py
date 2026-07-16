@@ -44,6 +44,11 @@ def login_response(
     return (HTTPStatus.BAD_REQUEST if error else HTTPStatus.OK), {}, document.encode()
 
 
+def landing_response() -> tuple[HTTPStatus, dict[str, str], bytes]:
+    document = TEMPLATES.get_template('landing.html').render(title='D20 Control')
+    return HTTPStatus.OK, {}, document.encode()
+
+
 def dashboard_response(
     identity: AdminIdentity,
     planned: Session | None,

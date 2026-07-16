@@ -1,4 +1,5 @@
 import asyncio
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -68,6 +69,26 @@ def test_registration_requires_known_telegram_user(tmp_path):
         auth = SQLiteLocalIdentityProvider(database)
         with pytest.raises(UnknownTelegramUser):
             await auth.issue_registration_code(404)
+        await database.close()
+
+    asyncio.run(scenario())
+
+
+def test_expired_registration_code_is_rejected(tmp_path):
+    async def scenario():
+        database = await SQLiteDatabase.connect(str(tmp_path / 'auth.sqlite3'))
+        await apply_migrations(database, MIGRATIONS)
+        await database.execute(
+            "INSERT INTO users (telegram_user_id, created_at) VALUES (7, '2026-01-01T00:00:00+00:00')"
+        )
+        auth = SQLiteLocalIdentityProvider(database)
+        code = await auth.issue_registration_code(7)
+        await database.execute(
+            'UPDATE local_registration_codes SET expires_at = ?',
+            ((datetime.now(UTC) - timedelta(seconds=1)).isoformat(),),
+        )
+        with pytest.raises(InvalidRegistrationCode):
+            await auth.register(code, 'player', 'long-enough-password')
         await database.close()
 
     asyncio.run(scenario())
