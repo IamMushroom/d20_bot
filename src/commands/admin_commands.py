@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 from urllib.parse import urlencode
 
@@ -21,13 +22,28 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     if chat is None or message is None or user is None:
         return
+    if getattr(chat, 'type', None) == 'private':
+        await context.bot.send_message(
+            chat_id=chat.id,
+            text='⚠️ Вызовите /admin в группе кампании. Ссылку бот пришлёт сюда, в личный чат.',
+            reply_to_message_id=message.id,
+        )
+        return
     core_client: CoreClient | None = context.application.bot_data.get(CORE_CLIENT_KEY)
     if core_client is not None:
         try:
             url = await core_client.create_admin_link(
                 chat.id, user.id, getattr(chat, 'title', None)
             )
-        except CoreClientError:
+        except CoreClientError as error:
+            logging.warning(
+                'Could not create admin link through Core',
+                extra={
+                    'error_type': type(error).__name__,
+                    'error_message': str(error),
+                    'core_path': '/api/admin-link',
+                },
+            )
             await context.bot.send_message(
                 chat_id=chat.id,
                 text='⚠️ Core недоступен или отклонил запрос.',

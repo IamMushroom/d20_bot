@@ -23,6 +23,7 @@ EXTRA_FIELDS = (
     'web_host',
     'web_port',
     'health_check',
+    'core_path',
 )
 LOG_CONTEXT: ContextVar[dict | None] = ContextVar('log_context', default=None)
 

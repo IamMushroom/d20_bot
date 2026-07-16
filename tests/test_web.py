@@ -150,7 +150,7 @@ def test_admin_command_uses_connected_core_client():
     assert bot.send_message.await_args.kwargs['chat_id'] == 7
 
 
-def test_admin_command_reports_connected_core_error():
+def test_admin_command_reports_connected_core_error(caplog):
     client = SimpleNamespace(
         create_admin_link=AsyncMock(side_effect=CoreClientError('unavailable'))
     )
@@ -164,10 +164,33 @@ def test_admin_command_reports_connected_core_error():
         effective_user=SimpleNamespace(id=7),
     )
 
-    asyncio.run(admin(update, context))
+    with caplog.at_level('WARNING'):
+        asyncio.run(admin(update, context))
 
     assert bot.send_message.await_args.kwargs['chat_id'] == -100
     assert 'Core недоступен' in bot.send_message.await_args.kwargs['text']
+    record = caplog.records[-1]
+    assert record.core_path == '/api/admin-link'
+    assert record.error_type == 'CoreClientError'
+    assert record.error_message == 'unavailable'
+
+
+def test_admin_command_explains_private_chat_usage():
+    client = SimpleNamespace(create_admin_link=AsyncMock())
+    bot = SimpleNamespace(send_message=AsyncMock())
+    context = SimpleNamespace(
+        application=SimpleNamespace(bot_data={CORE_CLIENT_KEY: client}), bot=bot
+    )
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=7, title=None, type='private'),
+        effective_message=SimpleNamespace(id=10),
+        effective_user=SimpleNamespace(id=7),
+    )
+
+    asyncio.run(admin(update, context))
+
+    client.create_admin_link.assert_not_awaited()
+    assert 'в группе кампании' in bot.send_message.await_args.kwargs['text']
 
 
 def test_web_url_command_uses_connected_core():
