@@ -6,7 +6,7 @@ from jinja2 import Environment, PackageLoader, StrictUndefined, select_autoescap
 from commands.game_utils import ANNOUNCEMENT_TIMEZONES, game_message, game_timezone
 from database.models import Session
 from services.campaigns import CampaignRoster
-from web.access import AdminIdentity
+from web.access import ActiveWebSession, AdminIdentity
 
 TEMPLATES = Environment(
     loader=PackageLoader('web'),
@@ -65,5 +65,14 @@ def settings_response(
         announcement_timezone=announcement_timezone,
         timezones=ANNOUNCEMENT_TIMEZONES,
         csrf_token=csrf_token,
+    )
+    return HTTPStatus.OK, {}, document.encode()
+
+
+def sessions_response(
+    sessions: tuple[ActiveWebSession, ...], csrf_token: str
+) -> tuple[HTTPStatus, dict[str, str], bytes]:
+    document = TEMPLATES.get_template('sessions.html').render(
+        sessions=sessions, csrf_token=csrf_token
     )
     return HTTPStatus.OK, {}, document.encode()

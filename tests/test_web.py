@@ -1,5 +1,6 @@
 import asyncio
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 from pathlib import Path
@@ -61,7 +62,9 @@ def test_admin_access_uses_one_time_logins_and_expiring_sessions():
     assert access.authenticate(session_id) == identity
     assert access.authenticate(None) is None
 
-    access._sessions[session_id] = (identity, datetime.now(UTC) - timedelta(seconds=1))
+    access._sessions[session_id] = replace(
+        access._sessions[session_id], expires_at=datetime.now(UTC) - timedelta(seconds=1)
+    )
     assert access.authenticate(session_id) is None
 
 
@@ -466,6 +469,42 @@ def test_web_rejects_invalid_csrf_and_logs_out(tmp_path):
     assert logout[0] is HTTPStatus.SEE_OTHER
     assert 'Max-Age=0' in logout[1]['Set-Cookie']
     assert after[0] is HTTPStatus.UNAUTHORIZED
+
+
+def test_web_lists_and_revokes_active_sessions(tmp_path):
+    async def scenario():
+        database, campaigns, sessions, access, bot = await setup(tmp_path)
+        server = AdminWebServer(access, campaigns, sessions, bot)
+        identity = AdminIdentity(-100, 7, 'Campaign')
+
+        first_token = access.create_login(identity)
+        first_login = await server._route('GET', f'/login?token={first_token}', {}, b'')
+        first_headers = {'cookie': first_login[1]['Set-Cookie'].split(';', 1)[0]}
+        second_token = access.create_login(identity)
+        await server._route('GET', f'/login?token={second_token}', {}, b'')
+
+        listed = access.list_sessions(identity, first_headers['cookie'].split('=', 1)[1])
+        other = next(session for session in listed if not session.current)
+        page = await server._route('GET', '/sessions', first_headers, b'')
+        revoked = await server._route(
+            'POST',
+            '/sessions/revoke',
+            first_headers,
+            csrf_body(access, first_headers, f'revocation_id={other.revocation_id}'.encode()),
+        )
+        remaining = access.list_sessions(identity, first_headers['cookie'].split('=', 1)[1])
+        foreign = access.revoke_by_id(AdminIdentity(-200, 7, None), remaining[0].revocation_id)
+        await database.close()
+        return listed, page, revoked, remaining, foreign
+
+    listed, page, revoked, remaining, foreign = asyncio.run(scenario())
+    assert len(listed) == 2
+    assert page[0] is HTTPStatus.OK
+    assert 'Активные сессии'.encode() in page[2]
+    assert 'Текущая'.encode() in page[2]
+    assert revoked == (HTTPStatus.SEE_OTHER, {'Location': '/sessions'}, b'')
+    assert len(remaining) == 1 and remaining[0].current
+    assert not foreign
 
 
 def test_internal_api_issues_admin_link_for_master(tmp_path):

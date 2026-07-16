@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Активные сессии — D20 Control{% endblock %}
+
+{% block content %}
+  <header class="hero">
+    <p class="eyebrow">Безопасность</p>
+    <h1>Активные сессии</h1>
+    <p class="muted">Входы в панель мастера для текущей кампании.</p>
+  </header>
+
+  <section class="card">
+    <ol class="history">
+      {% for session in sessions %}
+        <li class="history__item">
+          <span class="history__title">
+            Web-сессия{% if session.current %} <span class="badge badge--success">Текущая</span>{% endif %}
+          </span>
+          <span class="history__dates">
+            Создана: {{ session.created_at|game_datetime }} · Истекает: {{ session.expires_at|game_datetime }}
+          </span>
+          <form method="post" action="/sessions/revoke"{% if session.current %} data-confirm="Отозвать текущую сессию и выйти?"{% endif %}>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="revocation_id" value="{{ session.revocation_id }}">
+            <button class="button--danger" type="submit">Отозвать</button>
+          </form>
+        </li>
+      {% else %}
+        <li class="empty">Активных сессий нет.</li>
+      {% endfor %}
+    </ol>
+  </section>
+{% endblock %}

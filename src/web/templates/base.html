@@ -113,6 +113,7 @@
         <div class="header-actions">
           <a class="nav-link" href="/">Панель кампании</a>
           <a class="nav-link" href="/settings">Настройки</a>
+          <a class="nav-link" href="/sessions">Сессии</a>
           {% if csrf_token|default(None) %}
             <form class="nav-form" method="post" action="/logout">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

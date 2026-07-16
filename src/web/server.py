@@ -19,7 +19,7 @@ from services import (
     SessionStopStatus,
 )
 from web.access import AdminAccessService, AdminIdentity
-from web.views import dashboard_response, page_response, settings_response
+from web.views import dashboard_response, page_response, sessions_response, settings_response
 
 MAX_REQUEST_SIZE = 16 * 1024
 APP_JS = files('web').joinpath('static/app.js').read_bytes()
@@ -168,10 +168,30 @@ class AdminWebServer:
                 },
                 b'',
             )
+        if method == 'POST' and url.path == '/sessions/revoke':
+            revocation_id = form.get('revocation_id', [''])[0]
+            current = any(
+                session.current and session.revocation_id == revocation_id
+                for session in self._access.list_sessions(identity, session_id)
+            )
+            if not revocation_id or not self._access.revoke_by_id(identity, revocation_id):
+                return page_response(HTTPStatus.NOT_FOUND, 'Активная сессия не найдена.')
+            headers_out = {'Location': '/sessions'}
+            if current:
+                headers_out = {
+                    'Location': '/',
+                    'Set-Cookie': 'd20_admin=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0',
+                }
+            return HTTPStatus.SEE_OTHER, headers_out, b''
         if method == 'GET' and url.path == '/':
             return await self._dashboard(identity, session_id)
         if method == 'GET' and url.path == '/settings':
             return await self._settings(identity, session_id)
+        if method == 'GET' and url.path == '/sessions':
+            return sessions_response(
+                self._access.list_sessions(identity, session_id),
+                self._access.csrf_token(session_id) or '',
+            )
         if method == 'POST' and url.path == '/settings':
             return await self._save_settings(identity, form)
         if method == 'POST' and url.path == '/schedule':
