@@ -45,7 +45,8 @@
     <section class="card">
       <div class="card__header"><h2>Состав</h2></div>
       {% if roster %}
-        <p class="muted">Мастер: Telegram ID {{ roster.campaign.master_user_id or "не назначен" }}</p>
+        {% set masters = roster.memberships|selectattr('role', 'equalto', 'master')|list %}
+        <p class="muted">Мастера: {% if masters %}{% for member in masters %}Telegram ID {{ member.telegram_user_id }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}не назначены{% endif %}</p>
         <ul class="roster">
           {% for character in roster.characters %}
             <li>{{ character.name }}</li>

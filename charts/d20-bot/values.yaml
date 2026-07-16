@@ -35,6 +35,7 @@ core:
   foundryUrl: ""
   webBaseUrl: ""
   secureCookie: auto
+  trustedProxies: ""
   service:
     type: ClusterIP
     port: 8190

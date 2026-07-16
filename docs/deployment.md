@@ -16,6 +16,7 @@
 | `D20_BOT_WEB_BASE_URL` | нет | — | Публичный адрес панели по умолчанию. |
 | `D20_BOT_WEB_PORT` | нет | `8190` | Опубликованный порт панели. |
 | `D20_BOT_WEB_SECURE_COOKIE` | нет | `auto` | Secure-флаг cookie: `auto`, `true` или `false`. |
+| `D20_BOT_WEB_TRUSTED_PROXIES` | нет | — | Доверенные IP/CIDR reverse proxy через запятую. |
 | `D20_BOT_SQLITE_WEB_PORT` | нет | `8080` | Порт `sqlite-web` в debug-профиле. |
 
 ## Локальный запуск
@@ -76,8 +77,11 @@ docker compose logs -f core
 Мастер вызывает `/admin` в группе и получает одноразовую ссылку в личном диалоге. Ссылка
 действует 15 минут, HttpOnly-сессия — 8 часов. Сессии входа сбрасываются при перезапуске Core.
 
-`D20_BOT_WEB_SECURE_COOKIE=auto` включает Secure cookie при HTTPS или заголовке
-`X-Forwarded-Proto: https`. Публично выставлять панель без HTTPS не следует.
+`D20_BOT_WEB_SECURE_COOKIE=auto` включает Secure cookie по `X-Forwarded-Proto: https` только
+когда запрос пришёл от адреса из `D20_BOT_WEB_TRUSTED_PROXIES`. Укажите там адрес или сеть
+reverse proxy, например `172.18.0.0/16`; не используйте публичные сети без необходимости.
+Значение `true` всегда включает Secure независимо от proxy-заголовков. Публично выставлять
+панель без HTTPS не следует.
 
 ## Отладка SQLite
 

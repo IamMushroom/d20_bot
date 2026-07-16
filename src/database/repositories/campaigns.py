@@ -43,6 +43,24 @@ class CampaignRepository:
 
     async def set_master(self, chat_id: int, user_id: int, title: str | None = None) -> Campaign:
         campaign = await self.get_or_create(chat_id, title)
+        now = datetime.now(UTC).isoformat()
+        await self._database.execute(
+            """INSERT INTO users (telegram_user_id, created_at) VALUES (?, ?)
+            ON CONFLICT(telegram_user_id) DO NOTHING""",
+            (user_id, now),
+        )
+        await self._database.execute(
+            "DELETE FROM campaign_memberships WHERE campaign_id = ? AND role = 'master'",
+            (campaign.id,),
+        )
+        await self._database.execute(
+            """INSERT INTO campaign_memberships (
+                campaign_id, user_id, role, created_at, updated_at
+            ) SELECT ?, id, 'master', ?, ? FROM users WHERE telegram_user_id = ?
+            ON CONFLICT(campaign_id, user_id) DO UPDATE SET
+                role = 'master', updated_at = excluded.updated_at""",
+            (campaign.id, now, now, user_id),
+        )
         row = await self._database.fetch_one(
             'UPDATE campaigns SET master_user_id = ? WHERE id = ? RETURNING *',
             (user_id, campaign.id),

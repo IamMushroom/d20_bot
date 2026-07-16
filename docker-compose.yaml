@@ -95,6 +95,7 @@ services:
       D20_BOT_WEB_HOST: 0.0.0.0
       D20_BOT_WEB_PORT: 8190
       D20_BOT_WEB_SECURE_COOKIE: ${D20_BOT_WEB_SECURE_COOKIE:-auto}
+      D20_BOT_WEB_TRUSTED_PROXIES: ${D20_BOT_WEB_TRUSTED_PROXIES:-}
     volumes:
       - d20-data:/data
     ports:

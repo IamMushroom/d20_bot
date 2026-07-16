@@ -13,6 +13,7 @@ src/database/
 └── repositories/
     ├── campaigns.py
     ├── characters.py
+    ├── memberships.py
     ├── sessions.py
     ├── game_configs.py
     └── recaps.py
@@ -24,7 +25,9 @@ migrations/
 ├── 004_unify_schedules_and_sessions.sql
 ├── 005_campaign_master.sql
 ├── 006_web_base_url.sql
-└── 007_outbox.sql
+├── 007_outbox.sql
+├── 008_campaign_settings.sql
+└── 009_campaign_memberships.sql
 ```
 
 Telegram-команды не должны выполнять SQL или собирать бизнес-сценарии
@@ -176,6 +179,16 @@ schema_migrations(version, applied_at)
 | `title` | Название кампании или чата |
 | `master_user_id` | Telegram user ID назначенного мастера |
 | `created_at` | Время создания в UTC |
+
+`master_user_id` временно сохраняется для совместимости старых API. Источником прав является
+`campaign_memberships`.
+
+### User и CampaignMembership
+
+`users` хранит уникальную Telegram-идентичность, а `campaign_memberships` связывает пользователя
+с кампанией и ролью `player` или `master`. Роль относится только к конкретной кампании: один
+человек может быть мастером в одной игре и игроком в другой. Внутри одной кампании действует
+одна роль на пользователя; смена роли обновляет существующее членство.
 
 ### Character
 

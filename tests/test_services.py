@@ -44,6 +44,43 @@ def test_campaign_service_assigns_roles_and_updates_character(tmp_path):
     assert updated.character.name == 'Ада'
 
 
+def test_campaign_roles_are_scoped_to_each_campaign(tmp_path):
+    async def scenario():
+        database = await open_database(tmp_path, 'campaign-memberships.sqlite3')
+        service = CampaignService(database)
+        await service.assign_master(-100, 7, 'First')
+        await service.register_player(-100, 8, 'Bob')
+        await service.assign_master(-200, 8, 'Second')
+        await service.register_player(-200, 7, 'Alice')
+
+        first = await service.get_roster(-100)
+        second = await service.get_roster(-200)
+        alice_campaigns = await service.list_for_user(7)
+        bob_campaigns = await service.list_for_user(8)
+        roles = (
+            await service.is_master(-100, 7),
+            await service.is_master(-200, 7),
+            await service.is_master(-100, 8),
+            await service.is_master(-200, 8),
+        )
+        await database.close()
+        return first, second, alice_campaigns, bob_campaigns, roles
+
+    first, second, alice_campaigns, bob_campaigns, roles = asyncio.run(scenario())
+    assert first is not None and [
+        (member.telegram_user_id, member.role) for member in first.memberships
+    ] == [
+        (7, 'master'),
+        (8, 'player'),
+    ]
+    assert second is not None and [
+        (member.telegram_user_id, member.role) for member in second.memberships
+    ] == [(8, 'master'), (7, 'player')]
+    assert [campaign.title for campaign in alice_campaigns] == ['First', 'Second']
+    assert [campaign.title for campaign in bob_campaigns] == ['First', 'Second']
+    assert roles == (True, False, False, True)
+
+
 def test_session_service_schedules_and_replaces_announcement(tmp_path):
     async def scenario():
         database = await open_database(tmp_path, 'schedule-service.sqlite3')

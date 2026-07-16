@@ -2,8 +2,8 @@ from dataclasses import dataclass
 from enum import Enum, auto
 
 from database.connection import Database
-from database.models import Campaign, Character
-from database.repositories import CampaignRepository, CharacterRepository
+from database.models import Campaign, CampaignMembership, Character
+from database.repositories import CampaignRepository, CharacterRepository, MembershipRepository
 
 
 class PlayerRegistrationStatus(Enum):
@@ -21,26 +21,35 @@ class PlayerRegistration:
 class CampaignRoster:
     campaign: Campaign
     characters: tuple[Character, ...]
+    memberships: tuple[CampaignMembership, ...] = ()
 
 
 class CampaignService:
     def __init__(self, database: Database):
         self._campaigns = CampaignRepository(database)
         self._characters = CharacterRepository(database)
+        self._memberships = MembershipRepository(database)
 
     async def assign_master(self, chat_id: int, user_id: int, title: str | None = None) -> Campaign:
         return await self._campaigns.set_master(chat_id, user_id, title)
 
     async def is_master(self, chat_id: int, user_id: int) -> bool:
         campaign = await self._campaigns.get_by_chat_id(chat_id)
-        return campaign is not None and campaign.master_user_id == user_id
+        return (
+            campaign is not None
+            and await self._memberships.get_role(campaign.id, user_id) == 'master'
+        )
 
     async def get_roster(self, chat_id: int) -> CampaignRoster | None:
         campaign = await self._campaigns.get_by_chat_id(chat_id)
         if campaign is None:
             return None
         characters = await self._characters.list(campaign.id)
-        return CampaignRoster(campaign, tuple(characters))
+        memberships = await self._memberships.list_by_campaign(campaign.id)
+        return CampaignRoster(campaign, tuple(characters), memberships)
+
+    async def list_for_user(self, user_id: int) -> tuple[Campaign, ...]:
+        return await self._memberships.list_campaigns(user_id)
 
     async def set_title(self, chat_id: int, title: str) -> Campaign | None:
         return await self._campaigns.set_title(chat_id, title)
@@ -49,7 +58,8 @@ class CampaignService:
         self, chat_id: int, user_id: int, name: str, title: str | None = None
     ) -> PlayerRegistration:
         campaign = await self._campaigns.get_or_create(chat_id, title)
-        if campaign.master_user_id == user_id:
+        if await self._memberships.get_role(campaign.id, user_id) == 'master':
             return PlayerRegistration(PlayerRegistrationStatus.MASTER_CONFLICT, None)
+        await self._memberships.set_role(campaign.id, user_id, 'player')
         character = await self._characters.register(campaign.id, user_id, name)
         return PlayerRegistration(PlayerRegistrationStatus.REGISTERED, character)

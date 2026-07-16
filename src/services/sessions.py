@@ -9,6 +9,7 @@ from database.repositories import (
     ActiveSessionExistsError,
     CampaignRepository,
     GameConfigRepository,
+    MembershipRepository,
     SessionRepository,
 )
 
@@ -50,6 +51,7 @@ class SessionService:
         self._campaigns = CampaignRepository(database)
         self._sessions = SessionRepository(database)
         self._configs = GameConfigRepository(database)
+        self._memberships = MembershipRepository(database)
 
     async def get_planned(self, chat_id: int) -> Session | None:
         campaign = await self._campaigns.get_by_chat_id(chat_id)
@@ -103,7 +105,7 @@ class SessionService:
 
     async def start(self, chat_id: int, user_id: int, title: str | None) -> SessionStart:
         campaign = await self._campaigns.get_by_chat_id(chat_id)
-        if campaign is None or campaign.master_user_id != user_id:
+        if campaign is None or await self._memberships.get_role(campaign.id, user_id) != 'master':
             return SessionStart(SessionStartStatus.FORBIDDEN)
         async with self._lifecycle_lock:
             planned = await self._sessions.get_planned(campaign.id)
@@ -119,7 +121,7 @@ class SessionService:
 
     async def stop(self, chat_id: int, user_id: int) -> SessionStop:
         campaign = await self._campaigns.get_by_chat_id(chat_id)
-        if campaign is None or campaign.master_user_id != user_id:
+        if campaign is None or await self._memberships.get_role(campaign.id, user_id) != 'master':
             return SessionStop(SessionStopStatus.FORBIDDEN)
         async with self._lifecycle_lock:
             active = await self._sessions.get_active(campaign.id)

@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from http import HTTPStatus
 from importlib.resources import files
+from ipaddress import ip_address, ip_network
 from os import getenv
 from urllib.parse import parse_qs, urlsplit
 
@@ -62,7 +63,11 @@ class AdminWebServer:
     async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
             method, target, headers, body = await self._read_request(reader)
-            status, response_headers, content = await self._route(method, target, headers, body)
+            peer = writer.get_extra_info('peername')
+            remote_host = str(peer[0]) if isinstance(peer, tuple) and peer else None
+            status, response_headers, content = await self._route(
+                method, target, headers, body, remote_host
+            )
         except ValueError, UnicodeError:
             status, response_headers, content = HTTPStatus.BAD_REQUEST, {}, b'Bad request'
         except Exception:
@@ -104,7 +109,12 @@ class AdminWebServer:
         return method, target, headers, await reader.readexactly(length)
 
     async def _route(
-        self, method: str, target: str, headers: Mapping[str, str], body: bytes
+        self,
+        method: str,
+        target: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        remote_host: str | None = None,
     ) -> tuple[HTTPStatus, dict[str, str], bytes]:
         url = urlsplit(target)
         if method == 'GET' and url.path == '/health':
@@ -141,7 +151,11 @@ class AdminWebServer:
                 )
             cookie = f'd20_admin={session_id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800'
             secure_mode = getenv('D20_BOT_WEB_SECURE_COOKIE', 'auto').lower()
-            forwarded_protocol = headers.get('x-forwarded-proto', 'http').split(',', 1)[0].strip()
+            forwarded_protocol = (
+                headers.get('x-forwarded-proto', 'http').split(',', 1)[0].strip().lower()
+                if self._trusted_proxy(remote_host)
+                else 'http'
+            )
             if secure_mode == 'true' or (secure_mode == 'auto' and forwarded_protocol == 'https'):
                 cookie += '; Secure'
             return HTTPStatus.SEE_OTHER, {'Location': '/', 'Set-Cookie': cookie}, b''
@@ -552,6 +566,27 @@ class AdminWebServer:
             {'chat_id': identity.chat_id, 'number': session.number},
         )
         return HTTPStatus.SEE_OTHER, {'Location': '/'}, b''
+
+    @staticmethod
+    def _trusted_proxy(remote_host: str | None) -> bool:
+        if remote_host is None:
+            return False
+        try:
+            address = ip_address(remote_host)
+        except ValueError:
+            return False
+        for value in getenv('D20_BOT_WEB_TRUSTED_PROXIES', '').split(','):
+            value = value.strip()
+            if not value:
+                continue
+            try:
+                if address in ip_network(value, strict=False):
+                    return True
+            except ValueError:
+                logging.warning(
+                    'Invalid trusted proxy network', extra={'trusted_proxy_network': value}
+                )
+        return False
 
     @staticmethod
     def _cookie(headers: Mapping[str, str], name: str) -> str | None:

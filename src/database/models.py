@@ -12,6 +12,23 @@ class Campaign:
 
 
 @dataclass(frozen=True, slots=True)
+class User:
+    id: int
+    telegram_user_id: int
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class CampaignMembership:
+    campaign_id: int
+    user_id: int
+    telegram_user_id: int
+    role: str
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class Character:
     id: int
     campaign_id: int

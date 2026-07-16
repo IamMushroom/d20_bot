@@ -60,6 +60,8 @@ spec:
               value: {{ .Values.core.service.port | quote }}
             - name: D20_BOT_WEB_SECURE_COOKIE
               value: {{ .Values.core.secureCookie | quote }}
+            - name: D20_BOT_WEB_TRUSTED_PROXIES
+              value: {{ .Values.core.trustedProxies | quote }}
           ports:
             - name: http
               containerPort: {{ .Values.core.service.port }}
