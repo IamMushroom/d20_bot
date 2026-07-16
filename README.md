@@ -52,6 +52,7 @@ docker compose --profile platform up --build -d
 - [База данных и репозитории](docs/database.md)
 - [Разработка, тесты и CI/CD](docs/development.md)
 - [Helm chart](charts/d20-bot/README.md)
+- [Хотелки и технический backlog](todos/README.md)
 - [История изменений](CHANGELOG.md)
 
 ## Режимы

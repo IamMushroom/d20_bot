@@ -48,6 +48,7 @@ def test_standalone_registry_excludes_platform_commands():
     assert {command.name for command in standalone} == {
         'roll',
         'roll20',
+        'reroll',
         'duality',
         'timer',
         'help',
@@ -66,6 +67,7 @@ def test_connected_registry_only_adds_remote_commands():
     assert {command.name for command in connected} == {
         'roll',
         'roll20',
+        'reroll',
         'duality',
         'timer',
         'help',

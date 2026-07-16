@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from random import randint
 
-from dice.expression import DiceTerm, parse_roll_expression
+from dice.expression import DiceTerm, parse_roll_expression_or_raise
 
 Roller = Callable[[int, int], tuple[int, ...]]
 
@@ -22,10 +22,22 @@ def roll_d20(count: int, dice: int) -> tuple[int, ...]:
     return tuple(result)
 
 
-def evaluate_roll_expression(expression: str, roller: Roller) -> str | None:
-    terms = parse_roll_expression(expression)
-    if terms is None:
-        return None
+def _term_label(term: DiceTerm) -> str:
+    suffix = f'{term.keep}{term.keep_count}' if term.keep and term.keep_count else ''
+    return f'{term.count}d{term.sides}{suffix}'
+
+
+def _normalized_expression(terms) -> str:
+    parts = []
+    for index, term in enumerate(terms):
+        operator = '− ' if term.sign < 0 else ('+ ' if index else '')
+        label = _term_label(term) if isinstance(term, DiceTerm) else str(term.value)
+        parts.append(f'{operator}{label}')
+    return ' '.join(parts)
+
+
+def evaluate_roll_expression(expression: str, roller: Roller) -> str:
+    terms = parse_roll_expression_or_raise(expression)
 
     total = 0
     details = []
@@ -34,14 +46,12 @@ def evaluate_roll_expression(expression: str, roller: Roller) -> str | None:
         if isinstance(term, DiceTerm):
             rolls = roller(term.count, term.sides)
             kept_rolls = rolls
-            suffix = ''
             if term.keep and term.keep_count:
                 reverse = term.keep == 'kh'
                 kept_rolls = tuple(sorted(rolls, reverse=reverse)[: term.keep_count])
-                suffix = f'{term.keep}{term.keep_count}'
             subtotal = sum(kept_rolls)
             total += term.sign * subtotal
-            label = f'{term.count}d{term.sides}{suffix}'
+            label = _term_label(term)
             if term.keep:
                 details.append(
                     f'• {operator}{label}: {", ".join(map(str, rolls))} → '
@@ -53,7 +63,10 @@ def evaluate_roll_expression(expression: str, roller: Roller) -> str | None:
             total += term.sign * term.value
             details.append(f'• {operator}{term.value}')
 
-    return f'🎲 Итог: {total}\n🧮 Расчёт:\n' + '\n'.join(details)
+    return (
+        f'🎲 Бросок: {_normalized_expression(terms)}\n'
+        f'🎯 Итог: {total}\n🧮 Расчёт:\n' + '\n'.join(details)
+    )
 
 
 def dgh(modifier: int = 0) -> str:

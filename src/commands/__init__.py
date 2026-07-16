@@ -19,7 +19,7 @@ from commands.registry import (
     help_message,
 )
 from commands.role_commands import master, player
-from commands.roll_commands import roll, roll20, rolld20
+from commands.roll_commands import reroll, roll, roll20, rolld20
 from commands.session_commands import session_start, session_stop
 from commands.timer_commands import _finish_timer as _finish_timer
 from commands.timer_commands import timer
@@ -43,6 +43,7 @@ __all__ = (
     'roll',
     'roll20',
     'rolld20',
+    'reroll',
     'session_start',
     'session_stop',
     'timer',

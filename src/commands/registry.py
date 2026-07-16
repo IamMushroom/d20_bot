@@ -8,7 +8,7 @@ from commands.game_config_commands import game_url
 from commands.game_schedule_commands import game
 from commands.help_commands import help_command
 from commands.role_commands import master, player
-from commands.roll_commands import roll, roll20
+from commands.roll_commands import reroll, roll, roll20
 from commands.session_commands import session_start, session_stop
 from commands.timer_commands import timer
 from commands.version_commands import version_command
@@ -97,7 +97,7 @@ COMMANDS = (
             '/roll 1d20 + 4 — бросок с модификатором',
             '/roll 2d6 - 1d4 — сложное выражение',
             '/roll 4d6kh3 — оставить три лучших куба',
-            '/roll 2d20kl1 — бросок с помехой',
+            '/roll 2d20kl — бросок с помехой',
         ),
         show_in_menu=True,
         requires_core=False,
@@ -109,6 +109,13 @@ COMMANDS = (
         help_lines=('/roll20 d20 — повышенный шанс минимума и максимума',),
         aliases=('rolld20',),
         show_in_menu=True,
+        requires_core=False,
+    ),
+    CommandSpec(
+        name='reroll',
+        callback=reroll,
+        menu_description='повторить последний бросок',
+        help_lines=('/reroll — повторить последний успешный бросок',),
         requires_core=False,
     ),
     CommandSpec(

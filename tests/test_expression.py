@@ -1,6 +1,14 @@
 import pytest
 
-from dice.expression import DiceTerm, ModifierTerm, normalize_input, parse_roll_expression
+from dice.expression import (
+    MAX_EXPRESSION_LENGTH,
+    DiceTerm,
+    ModifierTerm,
+    RollParseError,
+    normalize_input,
+    parse_roll_expression,
+    parse_roll_expression_or_raise,
+)
 
 
 @pytest.mark.parametrize(
@@ -10,6 +18,9 @@ from dice.expression import DiceTerm, ModifierTerm, normalize_input, parse_roll_
         ('2D6', (DiceTerm(2, 6),)),
         ('8к10', (DiceTerm(8, 10),)),
         ('4d6kh3', (DiceTerm(4, 6, keep='kh', keep_count=3),)),
+        ('2d20kh', (DiceTerm(2, 20, keep='kh', keep_count=1),)),
+        ('2d20k', (DiceTerm(2, 20, keep='kh', keep_count=1),)),
+        ('2d20kl', (DiceTerm(2, 20, keep='kl', keep_count=1),)),
         ('2D20KL1', (DiceTerm(2, 20, keep='kl', keep_count=1),)),
         ('1d12 + 1d6', (DiceTerm(1, 12), DiceTerm(1, 6))),
         ('1d10 - 4', (DiceTerm(1, 10), ModifierTerm(4, -1))),
@@ -41,7 +52,6 @@ def test_parse_valid_expression(expression, expected):
         '1d6 + d',
         '4d6kh0',
         '4d6kh5',
-        '4d6kh',
         '4d6ka3',
         '0d6',
         '1d0',
@@ -57,3 +67,24 @@ def test_reject_invalid_expression(expression):
 
 def test_normalize_implicit_dice_count():
     assert normalize_input('d12') == (1, 12)
+
+
+@pytest.mark.parametrize(
+    ('expression', 'message', 'fragment'),
+    [
+        ('1d6 * 2', 'только операции', '*'),
+        ('1d6++2', 'повторный знак', '++2'),
+        ('4d6kh5', 'нельзя оставить', '4d6kh5'),
+        ('101d6', 'число кубов', '101d6'),
+        ('abc', 'ожидался куб', 'abc'),
+    ],
+)
+def test_detailed_parse_error(expression, message, fragment):
+    with pytest.raises(RollParseError, match=message) as caught:
+        parse_roll_expression_or_raise(expression)
+    assert caught.value.fragment == fragment
+
+
+def test_expression_length_limit():
+    with pytest.raises(RollParseError, match=str(MAX_EXPRESSION_LENGTH)):
+        parse_roll_expression_or_raise('1' * (MAX_EXPRESSION_LENGTH + 1))

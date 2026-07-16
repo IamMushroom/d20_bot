@@ -1,6 +1,7 @@
 import pytest
 
 from dice import roll as roll_module
+from dice.expression import RollParseError
 
 
 def test_regular_roll_uses_each_generated_value(monkeypatch):
@@ -31,18 +32,27 @@ def test_evaluate_expression_with_dice_and_modifiers():
 
     result = roll_module.evaluate_roll_expression('2d6 - 1d4 + 3', fixed_roller)
 
-    assert result == ('🎲 Итог: 5\n🧮 Расчёт:\n• 2d6: 1 + 2 = 3\n• − 1d4: 1 = 1\n• + 3')
+    assert result == (
+        '🎲 Бросок: 2d6 − 1d4 + 3\n🎯 Итог: 5\n🧮 Расчёт:\n• 2d6: 1 + 2 = 3\n• − 1d4: 1 = 1\n• + 3'
+    )
 
 
 def test_evaluate_invalid_expression():
-    assert roll_module.evaluate_roll_expression('2dd6', roll_module.roll_regular) is None
+    with pytest.raises(RollParseError):
+        roll_module.evaluate_roll_expression('2dd6', roll_module.roll_regular)
 
 
 @pytest.mark.parametrize(
     ('expression', 'expected'),
     [
-        ('4d6kh3', '🎲 Итог: 15\n🧮 Расчёт:\n• 4d6kh3: 1, 6, 3, 6 → 6 + 6 + 3 = 15'),
-        ('4d6kl2', '🎲 Итог: 4\n🧮 Расчёт:\n• 4d6kl2: 1, 6, 3, 6 → 1 + 3 = 4'),
+        (
+            '4d6kh3',
+            '🎲 Бросок: 4d6kh3\n🎯 Итог: 15\n🧮 Расчёт:\n• 4d6kh3: 1, 6, 3, 6 → 6 + 6 + 3 = 15',
+        ),
+        (
+            '4d6kl2',
+            '🎲 Бросок: 4d6kl2\n🎯 Итог: 4\n🧮 Расчёт:\n• 4d6kl2: 1, 6, 3, 6 → 1 + 3 = 4',
+        ),
     ],
 )
 def test_evaluate_keep_expression(expression, expected):

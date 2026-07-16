@@ -20,6 +20,7 @@ def make_context(args=()):
         args=list(args),
         bot=SimpleNamespace(send_message=AsyncMock()),
         application=SimpleNamespace(create_task=Mock()),
+        user_data={},
     )
 
 
@@ -32,7 +33,7 @@ def test_roll_handles_effective_message_without_direct_message():
     sent = context.bot.send_message.await_args.kwargs
     assert sent['chat_id'] == 123
     assert sent['reply_to_message_id'] == 456
-    assert sent['text'].startswith('🎲 Итог:')
+    assert sent['text'].startswith('🎲 Бросок:')
 
 
 def test_roll_without_argument_defaults_to_d20():
@@ -42,7 +43,7 @@ def test_roll_without_argument_defaults_to_d20():
     asyncio.run(commands.roll(update, context))
 
     sent = context.bot.send_message.await_args.kwargs
-    assert sent['text'].startswith('🎲 Итог:')
+    assert sent['text'].startswith('🎲 Бросок:')
     assert '• 1d20:' in sent['text']
 
 
@@ -53,7 +54,8 @@ def test_roll_rejects_invalid_expression():
     asyncio.run(commands.roll(update, context))
 
     sent = context.bot.send_message.await_args.kwargs
-    assert '⚠️ Неверный формат броска' in sent['text']
+    assert '⚠️ Не удалось разобрать бросок' in sent['text']
+    assert 'Проблемный фрагмент: `*`' in sent['text']
 
 
 @pytest.mark.parametrize('handler', [commands.roll20, commands.rolld20])
@@ -63,7 +65,27 @@ def test_weighted_roll_aliases(handler):
 
     asyncio.run(handler(update, context))
 
-    assert context.bot.send_message.await_args.kwargs['text'].startswith('🎲 Итог:')
+    assert context.bot.send_message.await_args.kwargs['text'].startswith('🎲 Бросок:')
+
+
+def test_reroll_repeats_last_successful_expression(monkeypatch):
+    context = make_context(('2d6',))
+    monkeypatch.setattr(commands.roll_commands, 'roll_regular', lambda count, _sides: (3,) * count)
+
+    asyncio.run(commands.roll(make_update(text='/roll 2d6'), context))
+    context.args = []
+    asyncio.run(commands.reroll(make_update(text='/reroll'), context))
+
+    assert '🎲 Бросок: 2d6' in context.bot.send_message.await_args.kwargs['text']
+    assert '🎯 Итог: 6' in context.bot.send_message.await_args.kwargs['text']
+
+
+def test_reroll_reports_when_there_is_nothing_to_repeat():
+    context = make_context()
+
+    asyncio.run(commands.reroll(make_update(text='/reroll'), context))
+
+    assert 'Пока нечего перебрасывать' in context.bot.send_message.await_args.kwargs['text']
 
 
 @pytest.mark.parametrize(
