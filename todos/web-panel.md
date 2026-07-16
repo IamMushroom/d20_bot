@@ -5,10 +5,12 @@
 
 ## Интерфейс
 
-- [ ] `WEB-001` Отделить HTML/CSS от HTTP routing в `src/web/server.py`.
+- [x] `WEB-001` Отделить HTML/CSS от HTTP routing в `src/web/server.py`: Jinja environment
+  и файловые шаблоны вынесены в `src/web/views.py` и `src/web/templates/`.
 - [ ] `WEB-002` Сделать адаптивную структуру страниц для телефона и desktop.
 - [ ] `WEB-003` Добавить единый layout, навигацию, состояния ошибок и пустых списков.
-- [ ] `WEB-004` Сохранить реализацию без тяжёлого frontend toolchain, пока он не станет необходим.
+- [x] `WEB-004` Сохранить реализацию без тяжёлого frontend toolchain: server-side Jinja
+  не требует Node.js или сборки frontend assets.
 
 ## Пользователи и роли
 

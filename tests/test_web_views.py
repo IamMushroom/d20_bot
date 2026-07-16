@@ -1,0 +1,62 @@
+from datetime import UTC, datetime
+from http import HTTPStatus
+
+from database.models import Campaign, Character, Session
+from services.campaigns import CampaignRoster
+from web.access import AdminIdentity
+from web.views import dashboard_response, page_response
+
+NOW = datetime(2026, 7, 16, tzinfo=UTC)
+
+
+def session(*, title=None, active=False):
+    return Session(
+        id=1,
+        campaign_id=1,
+        number=2,
+        title=title,
+        scheduled_at=NOW,
+        started_at=NOW if active else None,
+        finished_at=None,
+        foundry_url='https://foundry.example',
+        message_id=None,
+        updated_at=NOW,
+    )
+
+
+def test_page_response_escapes_plain_content():
+    status, headers, content = page_response(HTTPStatus.BAD_REQUEST, '<script>bad</script>')
+
+    assert status is HTTPStatus.BAD_REQUEST
+    assert headers == {}
+    assert b'&lt;script&gt;bad&lt;/script&gt;' in content
+    assert b'<script>bad</script>' not in content
+
+
+def test_dashboard_response_escapes_campaign_and_character_data():
+    campaign = Campaign(1, -100, 'Campaign', 7, NOW)
+    character = Character(1, 1, 8, '<Tilly>', NOW, NOW)
+    response = dashboard_response(
+        AdminIdentity(-100, 7, '<Campaign>'),
+        session(),
+        None,
+        CampaignRoster(campaign, (character,)),
+        'https://foundry.example/?a=1&b=2',
+    )
+
+    assert response[0] is HTTPStatus.OK
+    assert b'&lt;Campaign&gt;' in response[2]
+    assert b'&lt;Tilly&gt;' in response[2]
+    assert b'a=1&amp;b=2' in response[2]
+    assert 'Начать сессию'.encode() in response[2]
+
+
+def test_dashboard_response_renders_active_and_empty_campaign_states():
+    active = dashboard_response(
+        AdminIdentity(-100, 7, None), None, session(title='<Tower>', active=True), None, ''
+    )
+
+    assert 'Активная сессия №2'.encode() in active[2]
+    assert b'&lt;Tower&gt;' in active[2]
+    assert 'Состав кампании не найден'.encode() in active[2]
+    assert 'Игра не назначена'.encode() in active[2]

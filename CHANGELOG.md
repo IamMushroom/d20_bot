@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `WEB-001`, `WEB-004`: HTML/CSS вынесены из HTTP routing в Jinja-шаблоны с autoescape
+  и inheritance, без frontend toolchain.
+
 ## [0.13.0] - 2026-07-16
 
 ### Added

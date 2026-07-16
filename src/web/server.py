@@ -1,5 +1,4 @@
 import asyncio
-import html
 import json
 import logging
 import secrets
@@ -19,6 +18,7 @@ from services import (
     SessionStopStatus,
 )
 from web.access import AdminAccessService, AdminIdentity
+from web.views import dashboard_response, page_response
 
 MAX_REQUEST_SIZE = 16 * 1024
 
@@ -125,7 +125,7 @@ class AdminWebServer:
             token = parse_qs(url.query).get('token', [''])[0]
             session_id = self._access.consume_login(token)
             if session_id is None:
-                return self._page(
+                return page_response(
                     HTTPStatus.UNAUTHORIZED, 'Ссылка недействительна или уже использована.'
                 )
             cookie = f'd20_admin={session_id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800'
@@ -137,7 +137,7 @@ class AdminWebServer:
 
         identity = self._access.authenticate(self._cookie(headers, 'd20_admin'))
         if identity is None:
-            return self._page(HTTPStatus.UNAUTHORIZED, 'Запросите новую ссылку командой /admin.')
+            return page_response(HTTPStatus.UNAUTHORIZED, 'Запросите новую ссылку командой /admin.')
         if method == 'GET' and url.path == '/':
             return await self._dashboard(identity)
         if method == 'POST' and url.path == '/schedule':
@@ -146,7 +146,7 @@ class AdminWebServer:
             return await self._start_session(identity, parse_qs(body.decode()))
         if method == 'POST' and url.path == '/session/stop':
             return await self._stop_session(identity)
-        return self._page(HTTPStatus.NOT_FOUND, 'Страница не найдена.')
+        return page_response(HTTPStatus.NOT_FOUND, 'Страница не найдена.')
 
     async def _admin_link(
         self, headers: Mapping[str, str], form: Mapping[str, list[str]]
@@ -366,46 +366,10 @@ class AdminWebServer:
         session = await self._sessions.get_planned(identity.chat_id)
         active = await self._sessions.get_active(identity.chat_id)
         roster = await self._campaigns.get_roster(identity.chat_id)
-        current = (
-            html.escape(game_message(session)).replace('\n', '<br>')
-            if session
-            else 'Игра не назначена.'
-        )
         default_url = await self._sessions.get_default_url(identity.chat_id) or getenv(
             'D20_BOT_FOUNDRY_URL', ''
         )
-        title = html.escape(identity.chat_title or str(identity.chat_id))
-        if roster is None:
-            roster_html = '<p>Состав кампании не найден.</p>'
-        else:
-            players = ''.join(
-                f'<li>{html.escape(character.name)}</li>' for character in roster.characters
-            )
-            roster_html = (
-                f'<h2>Состав</h2><p>Мастер: Telegram ID '
-                f'{roster.campaign.master_user_id or "не назначен"}</p>'
-                f'<ul>{players or "<li>Игроки не зарегистрированы</li>"}</ul>'
-            )
-        if active is None:
-            lifecycle = """
-            <form method="post" action="/session/start">
-              <label>Название сессии <input name="title" maxlength="100"></label>
-              <button type="submit">▶️ Начать сессию</button>
-            </form>"""
-        else:
-            active_title = f' — {html.escape(active.title)}' if active.title else ''
-            lifecycle = f"""<p>▶️ Активная сессия №{active.number}{active_title}</p>
-            <form method="post" action="/session/stop">
-              <button type="submit">⏹️ Завершить сессию</button>
-            </form>"""
-        content = f'''
-        <h1>{title}</h1>{roster_html}<p>{current}</p>{lifecycle}
-        <form method="post" action="/schedule">
-          <label>Дата и время <input required type="datetime-local" name="scheduled_at"></label>
-          <label>Foundry URL <input required type="url" name="foundry_url" value="{html.escape(default_url)}"></label>
-          <button type="submit">Сохранить и опубликовать</button>
-        </form>'''
-        return self._page(HTTPStatus.OK, content, raw=True)
+        return dashboard_response(identity, session, active, roster, default_url)
 
     async def _schedule(
         self, identity: AdminIdentity, form: Mapping[str, list[str]]
@@ -415,9 +379,9 @@ class AdminWebServer:
             scheduled_at = local.replace(tzinfo=game_timezone()).astimezone(UTC)
             foundry_url = form['foundry_url'][0]
         except KeyError, ValueError, IndexError:
-            return self._page(HTTPStatus.BAD_REQUEST, 'Неверные дата или URL.')
+            return page_response(HTTPStatus.BAD_REQUEST, 'Неверные дата или URL.')
         if not valid_url(foundry_url):
-            return self._page(HTTPStatus.BAD_REQUEST, 'Неверный Foundry URL.')
+            return page_response(HTTPStatus.BAD_REQUEST, 'Неверный Foundry URL.')
         result = await self._sessions.schedule(
             identity.chat_id, identity.chat_title, scheduled_at, foundry_url
         )
@@ -437,12 +401,12 @@ class AdminWebServer:
     ) -> tuple[HTTPStatus, dict[str, str], bytes]:
         title = form.get('title', [''])[0].strip() or None
         if title is not None and len(title) > 100:
-            return self._page(HTTPStatus.BAD_REQUEST, 'Название слишком длинное.')
+            return page_response(HTTPStatus.BAD_REQUEST, 'Название слишком длинное.')
         result = await self._sessions.start(identity.chat_id, identity.user_id, title)
         if result.status is SessionStartStatus.FORBIDDEN:
-            return self._page(HTTPStatus.FORBIDDEN, 'Доступ к кампании отозван.')
+            return page_response(HTTPStatus.FORBIDDEN, 'Доступ к кампании отозван.')
         if result.status is SessionStartStatus.ALREADY_ACTIVE:
-            return self._page(HTTPStatus.CONFLICT, 'Сессия уже активна.')
+            return page_response(HTTPStatus.CONFLICT, 'Сессия уже активна.')
         session = result.session
         assert session is not None
         await self._outbox.publish(
@@ -461,9 +425,9 @@ class AdminWebServer:
     ) -> tuple[HTTPStatus, dict[str, str], bytes]:
         result = await self._sessions.stop(identity.chat_id, identity.user_id)
         if result.status is SessionStopStatus.FORBIDDEN:
-            return self._page(HTTPStatus.FORBIDDEN, 'Доступ к кампании отозван.')
+            return page_response(HTTPStatus.FORBIDDEN, 'Доступ к кампании отозван.')
         if result.status is SessionStopStatus.NO_ACTIVE_SESSION:
-            return self._page(HTTPStatus.CONFLICT, 'Активной сессии нет.')
+            return page_response(HTTPStatus.CONFLICT, 'Активной сессии нет.')
         session = result.session
         assert session is not None
         await self._outbox.publish(
@@ -480,14 +444,6 @@ class AdminWebServer:
             if separator and key == name:
                 return value
         return None
-
-    @staticmethod
-    def _page(
-        status: HTTPStatus, content: str, *, raw: bool = False
-    ) -> tuple[HTTPStatus, dict[str, str], bytes]:
-        body = content if raw else html.escape(content)
-        document = f"""<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>D20 Admin</title><style>body{{font:16px system-ui;max-width:42rem;margin:3rem auto;padding:0 1rem;background:#17151c;color:#eee}}label,input,button{{display:block;width:100%;box-sizing:border-box;margin:.8rem 0}}input,button{{padding:.7rem}}button{{cursor:pointer}}</style><main>{body}</main></html>"""
-        return status, {}, document.encode()
 
     @staticmethod
     def _json(
