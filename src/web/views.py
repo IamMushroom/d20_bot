@@ -4,7 +4,7 @@ from http import HTTPStatus
 from jinja2 import Environment, PackageLoader, StrictUndefined, select_autoescape
 
 from commands.game_utils import ANNOUNCEMENT_TIMEZONES, game_message, game_timezone
-from database.models import Session
+from database.models import Campaign, Session
 from services.campaigns import CampaignRoster
 from web.access import ActiveWebSession, AdminIdentity
 
@@ -41,6 +41,7 @@ def dashboard_response(
     history: list[Session] | None = None,
     announcement_timezone: str = 'Europe/Moscow',
     csrf_token: str = '',
+    role: str = 'master',
 ) -> tuple[HTTPStatus, dict[str, str], bytes]:
     document = TEMPLATES.get_template('dashboard.html').render(
         title=(roster.campaign.title if roster and roster.campaign.title else None)
@@ -52,12 +53,18 @@ def dashboard_response(
         default_url=default_url,
         history=history or [],
         csrf_token=csrf_token,
+        role=role,
+        campaign_chat_id=identity.chat_id,
     )
     return HTTPStatus.OK, {}, document.encode()
 
 
 def settings_response(
-    title: str, default_url: str, announcement_timezone: str, csrf_token: str = ''
+    title: str,
+    default_url: str,
+    announcement_timezone: str,
+    csrf_token: str = '',
+    campaign_chat_id: int = 0,
 ) -> tuple[HTTPStatus, dict[str, str], bytes]:
     document = TEMPLATES.get_template('settings.html').render(
         title=title,
@@ -65,6 +72,16 @@ def settings_response(
         announcement_timezone=announcement_timezone,
         timezones=ANNOUNCEMENT_TIMEZONES,
         csrf_token=csrf_token,
+        campaign_chat_id=campaign_chat_id,
+    )
+    return HTTPStatus.OK, {}, document.encode()
+
+
+def campaigns_response(
+    campaigns: tuple[Campaign, ...], initial_chat_id: int, csrf_token: str = ''
+) -> tuple[HTTPStatus, dict[str, str], bytes]:
+    document = TEMPLATES.get_template('campaigns.html').render(
+        campaigns=campaigns, initial_chat_id=initial_chat_id, csrf_token=csrf_token
     )
     return HTTPStatus.OK, {}, document.encode()
 

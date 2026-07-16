@@ -446,7 +446,7 @@ def test_web_campaign_settings(tmp_path):
     assert shown[0] is HTTPStatus.OK
     assert b'Europe/Moscow' in shown[2]
     assert invalid[0] is HTTPStatus.BAD_REQUEST
-    assert saved == (HTTPStatus.SEE_OTHER, {'Location': '/settings'}, b'')
+    assert saved == (HTTPStatus.SEE_OTHER, {'Location': '/settings?campaign=-100'}, b'')
     assert roster is not None and roster.campaign.title == 'New Campaign'
     assert config == ('https://vtt.example', 'Asia/Yerevan')
     assert b'New Campaign' in dashboard[2]
@@ -506,7 +506,67 @@ def test_web_lists_and_revokes_active_sessions(tmp_path):
     assert 'Текущая'.encode() in page[2]
     assert revoked == (HTTPStatus.SEE_OTHER, {'Location': '/sessions'}, b'')
     assert len(remaining) == 1 and remaining[0].current
-    assert not foreign
+    assert foreign
+
+
+def test_web_user_can_switch_between_campaign_roles(tmp_path):
+    async def scenario():
+        database, campaigns, sessions, access, bot = await setup(tmp_path)
+        await campaigns.assign_master(-200, 8, 'Second')
+        await campaigns.register_player(-200, 7, 'Alice')
+        server = AdminWebServer(access, campaigns, sessions, bot)
+        token = access.create_login(AdminIdentity(-100, 7, 'First'))
+        login = await server._route('GET', f'/login?token={token}', {}, b'')
+        headers = {'cookie': login[1]['Set-Cookie'].split(';', 1)[0]}
+
+        selector = await server._route('GET', '/campaigns', headers, b'')
+        player_page = await server._route('GET', '/?campaign=-200', headers, b'')
+        player_settings = await server._route('GET', '/settings?campaign=-200', headers, b'')
+        player_action = await server._route(
+            'POST',
+            '/session/start',
+            headers,
+            csrf_body(access, headers, b'chat_id=-200'),
+        )
+        foreign = await server._route('GET', '/?campaign=-300', headers, b'')
+        invalid_query = await server._route('GET', '/?campaign=nope', headers, b'')
+        invalid_form = await server._route(
+            'POST',
+            '/session/start',
+            headers,
+            csrf_body(access, headers, b'chat_id=nope'),
+        )
+        await database.close()
+        return (
+            login,
+            selector,
+            player_page,
+            player_settings,
+            player_action,
+            foreign,
+            invalid_query,
+            invalid_form,
+        )
+
+    (
+        login,
+        selector,
+        player_page,
+        player_settings,
+        player_action,
+        foreign,
+        invalid_query,
+        invalid_form,
+    ) = asyncio.run(scenario())
+    assert login[1]['Location'] == '/campaigns'
+    assert b'Campaign' in selector[2] and b'Second' in selector[2]
+    assert 'Режим игрока'.encode() in player_page[2]
+    assert b'data-local-schedule' not in player_page[2]
+    assert player_settings[0] is HTTPStatus.FORBIDDEN
+    assert player_action[0] is HTTPStatus.FORBIDDEN
+    assert foreign[0] is HTTPStatus.FORBIDDEN
+    assert invalid_query[0] is HTTPStatus.BAD_REQUEST
+    assert invalid_form[0] is HTTPStatus.BAD_REQUEST
 
 
 def test_internal_api_issues_admin_link_for_master(tmp_path):

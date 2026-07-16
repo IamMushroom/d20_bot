@@ -40,6 +40,10 @@ class CampaignService:
             and await self._memberships.get_role(campaign.id, user_id) == 'master'
         )
 
+    async def get_role(self, chat_id: int, user_id: int) -> str | None:
+        campaign = await self._campaigns.get_by_chat_id(chat_id)
+        return await self._memberships.get_role(campaign.id, user_id) if campaign else None
+
     async def get_roster(self, chat_id: int) -> CampaignRoster | None:
         campaign = await self._campaigns.get_by_chat_id(chat_id)
         if campaign is None:

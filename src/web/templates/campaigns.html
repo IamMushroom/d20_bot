@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Кампании — D20 Control{% endblock %}
+
+{% block content %}
+  <header class="hero">
+    <p class="eyebrow">D20 Control</p>
+    <h1>Ваши кампании</h1>
+    <p class="muted">Выберите игру, с которой хотите работать.</p>
+  </header>
+  <div class="grid">
+    {% for campaign in campaigns %}
+      <a class="card campaign-link" href="/?campaign={{ campaign.chat_id }}">
+        <h2>{{ campaign.title or "Кампания без названия" }}</h2>
+        <span class="muted">Telegram chat {{ campaign.chat_id }}</span>
+        {% if campaign.chat_id == initial_chat_id %}<span class="badge">Точка входа</span>{% endif %}
+      </a>
+    {% else %}
+      <div class="card empty">Доступных кампаний пока нет.</div>
+    {% endfor %}
+  </div>
+{% endblock %}

@@ -20,7 +20,13 @@ from services import (
     SessionStopStatus,
 )
 from web.access import AdminAccessService, AdminIdentity
-from web.views import dashboard_response, page_response, sessions_response, settings_response
+from web.views import (
+    campaigns_response,
+    dashboard_response,
+    page_response,
+    sessions_response,
+    settings_response,
+)
 
 MAX_REQUEST_SIZE = 16 * 1024
 APP_JS = files('web').joinpath('static/app.js').read_bytes()
@@ -158,7 +164,7 @@ class AdminWebServer:
             )
             if secure_mode == 'true' or (secure_mode == 'auto' and forwarded_protocol == 'https'):
                 cookie += '; Secure'
-            return HTTPStatus.SEE_OTHER, {'Location': '/', 'Set-Cookie': cookie}, b''
+            return HTTPStatus.SEE_OTHER, {'Location': '/campaigns', 'Set-Cookie': cookie}, b''
 
         session_id = self._cookie(headers, 'd20_admin')
         identity = self._access.authenticate(session_id)
@@ -172,6 +178,20 @@ class AdminWebServer:
                 return page_response(
                     HTTPStatus.FORBIDDEN, 'Проверка безопасности формы не пройдена.'
                 )
+        selected_identity = identity
+        if method == 'POST' and url.path in {
+            '/settings',
+            '/schedule',
+            '/session/start',
+            '/session/stop',
+        }:
+            try:
+                chat_id = int(form.get('chat_id', [str(identity.chat_id)])[0])
+            except ValueError:
+                return page_response(HTTPStatus.BAD_REQUEST, 'Некорректная кампания.')
+            if not await self._campaigns.is_master(chat_id, identity.user_id):
+                return page_response(HTTPStatus.FORBIDDEN, 'Недостаточно прав в этой кампании.')
+            selected_identity = AdminIdentity(chat_id, identity.user_id, None)
         if method == 'POST' and url.path == '/logout':
             self._access.revoke(session_id)
             return (
@@ -198,22 +218,43 @@ class AdminWebServer:
                 }
             return HTTPStatus.SEE_OTHER, headers_out, b''
         if method == 'GET' and url.path == '/':
-            return await self._dashboard(identity, session_id)
+            try:
+                chat_id = int(parse_qs(url.query).get('campaign', [str(identity.chat_id)])[0])
+            except ValueError:
+                return page_response(HTTPStatus.BAD_REQUEST, 'Некорректная кампания.')
+            role = await self._campaigns.get_role(chat_id, identity.user_id)
+            if role is None:
+                return page_response(HTTPStatus.FORBIDDEN, 'Нет доступа к этой кампании.')
+            return await self._dashboard(
+                AdminIdentity(chat_id, identity.user_id, None), session_id, role
+            )
+        if method == 'GET' and url.path == '/campaigns':
+            return campaigns_response(
+                await self._campaigns.list_for_user(identity.user_id),
+                identity.chat_id,
+                self._access.csrf_token(session_id) or '',
+            )
         if method == 'GET' and url.path == '/settings':
-            return await self._settings(identity, session_id)
+            try:
+                chat_id = int(parse_qs(url.query).get('campaign', [str(identity.chat_id)])[0])
+            except ValueError:
+                return page_response(HTTPStatus.BAD_REQUEST, 'Некорректная кампания.')
+            if not await self._campaigns.is_master(chat_id, identity.user_id):
+                return page_response(HTTPStatus.FORBIDDEN, 'Настройки доступны только мастеру.')
+            return await self._settings(AdminIdentity(chat_id, identity.user_id, None), session_id)
         if method == 'GET' and url.path == '/sessions':
             return sessions_response(
                 self._access.list_sessions(identity, session_id),
                 self._access.csrf_token(session_id) or '',
             )
         if method == 'POST' and url.path == '/settings':
-            return await self._save_settings(identity, form)
+            return await self._save_settings(selected_identity, form)
         if method == 'POST' and url.path == '/schedule':
-            return await self._schedule(identity, form)
+            return await self._schedule(selected_identity, form)
         if method == 'POST' and url.path == '/session/start':
-            return await self._start_session(identity, form)
+            return await self._start_session(selected_identity, form)
         if method == 'POST' and url.path == '/session/stop':
-            return await self._stop_session(identity)
+            return await self._stop_session(selected_identity)
         return page_response(HTTPStatus.NOT_FOUND, 'Страница не найдена.')
 
     async def _admin_link(
@@ -439,7 +480,7 @@ class AdminWebServer:
         )
 
     async def _dashboard(
-        self, identity: AdminIdentity, session_id: str
+        self, identity: AdminIdentity, session_id: str, role: str = 'master'
     ) -> tuple[HTTPStatus, dict[str, str], bytes]:
         session = await self._sessions.get_planned(identity.chat_id)
         active = await self._sessions.get_active(identity.chat_id)
@@ -458,6 +499,7 @@ class AdminWebServer:
             history,
             timezone_name,
             self._access.csrf_token(session_id) or '',
+            role,
         )
 
     async def _schedule(
@@ -488,7 +530,7 @@ class AdminWebServer:
                 'previous_message_id': result.previous_message_id,
             },
         )
-        return HTTPStatus.SEE_OTHER, {'Location': '/'}, b''
+        return HTTPStatus.SEE_OTHER, {'Location': f'/?campaign={identity.chat_id}'}, b''
 
     async def _settings(
         self, identity: AdminIdentity, session_id: str
@@ -502,7 +544,11 @@ class AdminWebServer:
         )
         timezone_name = await self._sessions.get_announcement_timezone(identity.chat_id)
         return settings_response(
-            title, default_url, timezone_name, self._access.csrf_token(session_id) or ''
+            title,
+            default_url,
+            timezone_name,
+            self._access.csrf_token(session_id) or '',
+            identity.chat_id,
         )
 
     async def _save_settings(
@@ -525,7 +571,11 @@ class AdminWebServer:
         await self._campaigns.set_title(identity.chat_id, title)
         await self._sessions.set_default_url(identity.chat_id, foundry_url, now)
         await self._sessions.set_announcement_timezone(identity.chat_id, timezone_name, now)
-        return HTTPStatus.SEE_OTHER, {'Location': '/settings'}, b''
+        return (
+            HTTPStatus.SEE_OTHER,
+            {'Location': f'/settings?campaign={identity.chat_id}'},
+            b'',
+        )
 
     async def _start_session(
         self, identity: AdminIdentity, form: Mapping[str, list[str]]
@@ -549,7 +599,7 @@ class AdminWebServer:
                 'announcement_message_id': result.announcement_message_id,
             },
         )
-        return HTTPStatus.SEE_OTHER, {'Location': '/'}, b''
+        return HTTPStatus.SEE_OTHER, {'Location': f'/?campaign={identity.chat_id}'}, b''
 
     async def _stop_session(
         self, identity: AdminIdentity
@@ -565,7 +615,7 @@ class AdminWebServer:
             'session_stopped',
             {'chat_id': identity.chat_id, 'number': session.number},
         )
-        return HTTPStatus.SEE_OTHER, {'Location': '/'}, b''
+        return HTTPStatus.SEE_OTHER, {'Location': f'/?campaign={identity.chat_id}'}, b''
 
     @staticmethod
     def _trusted_proxy(remote_host: str | None) -> bool:

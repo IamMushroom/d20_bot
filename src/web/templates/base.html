@@ -87,6 +87,9 @@
       .history__item { display: grid; gap: .2rem; padding: .75rem .85rem; border-radius: .75rem; background: color-mix(in srgb, var(--text) 5%, transparent); }
       .history__title { font-weight: 750; }
       .history__dates { color: var(--muted); font-size: .82rem; }
+      .campaign-link { display: grid; gap: .55rem; color: var(--text); text-decoration: none; }
+      .campaign-link h2 { margin: 0; }
+      .campaign-link:hover { border-color: var(--accent); transform: translateY(-1px); }
       @media (min-width: 48rem) {
         .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .card--wide { grid-column: 1 / -1; }
@@ -111,8 +114,11 @@
       <div class="site-header__inner">
         <a class="brand" href="/"><span class="brand__mark">20</span><span>D20 Control</span></a>
         <div class="header-actions">
-          <a class="nav-link" href="/">Панель кампании</a>
-          <a class="nav-link" href="/settings">Настройки</a>
+          <a class="nav-link" href="/campaigns">Кампании</a>
+          {% if campaign_chat_id|default(None) %}
+            <a class="nav-link" href="/?campaign={{ campaign_chat_id }}">Панель</a>
+            {% if role|default('master') == 'master' %}<a class="nav-link" href="/settings?campaign={{ campaign_chat_id }}">Настройки</a>{% endif %}
+          {% endif %}
           <a class="nav-link" href="/sessions">Сессии</a>
           {% if csrf_token|default(None) %}
             <form class="nav-form" method="post" action="/logout">

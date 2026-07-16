@@ -80,8 +80,7 @@ class AdminAccessService:
                 current=session_id == current_session_id,
             )
             for session_id, session in self._sessions.items()
-            if session.identity.chat_id == identity.chat_id
-            and session.identity.user_id == identity.user_id
+            if session.identity.user_id == identity.user_id
         )
         return tuple(sorted(sessions, key=lambda session: session.created_at, reverse=True))
 
@@ -90,7 +89,6 @@ class AdminAccessService:
         for session_id, session in self._sessions.items():
             if (
                 secrets.compare_digest(session.revocation_id, revocation_id)
-                and session.identity.chat_id == identity.chat_id
                 and session.identity.user_id == identity.user_id
             ):
                 del self._sessions[session_id]
