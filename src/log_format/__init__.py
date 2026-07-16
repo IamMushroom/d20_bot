@@ -19,6 +19,10 @@ EXTRA_FIELDS = (
     'error_message',
     'tag',
     'backup_path',
+    'timezone',
+    'web_host',
+    'web_port',
+    'health_check',
 )
 LOG_CONTEXT: ContextVar[dict | None] = ContextVar('log_context', default=None)
 

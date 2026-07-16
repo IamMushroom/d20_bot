@@ -57,6 +57,12 @@ services:
       - ALL
     restart: unless-stopped
     stop_grace_period: 30s
+    healthcheck:
+      test: [CMD, .venv/bin/python, src/healthcheck.py, --readiness]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     logging:
       driver: json-file
       options:

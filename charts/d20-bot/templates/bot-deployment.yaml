@@ -59,6 +59,20 @@ spec:
             {{- end }}
           resources:
             {{- toYaml .Values.bot.resources | nindent 12 }}
+          livenessProbe:
+            exec:
+              command: [.venv/bin/python, src/healthcheck.py]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command: [.venv/bin/python, src/healthcheck.py, --readiness]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
           volumeMounts:
             - name: tmp
               mountPath: /tmp

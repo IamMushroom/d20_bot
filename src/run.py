@@ -10,6 +10,7 @@ import commands
 import log_format
 from core import CORE_CLIENT_KEY, CoreClient
 from core.events import EVENT_POLLER_KEY, poll_events, stop_event_poller
+from healthcheck import start_heartbeat, stop_heartbeat
 
 CORE_CONNECTED_KEY = 'core_connected'
 
@@ -38,12 +39,12 @@ async def initialize_application(application) -> None:
         application.bot_data[EVENT_POLLER_KEY] = asyncio.create_task(
             poll_events(application), name='core-event-poller'
         )
-        await set_bot_commands(application)
-        return
     await set_bot_commands(application)
+    start_heartbeat(application)
 
 
 async def shutdown_application(application) -> None:
+    await stop_heartbeat(application)
     await stop_event_poller(application)
     application.bot_data.pop(CORE_CONNECTED_KEY, None)
     application.bot_data.pop(CORE_CLIENT_KEY, None)

@@ -1,5 +1,6 @@
 import logging
 import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime
 from os import getenv
 from pathlib import Path
@@ -14,7 +15,10 @@ def backup_database(source: Path, destination_directory: Path, keep: int) -> Pat
     destination_directory.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')
     destination = destination_directory / f'd20-{timestamp}.sqlite3'
-    with sqlite3.connect(source) as source_database, sqlite3.connect(destination) as backup:
+    with (
+        closing(sqlite3.connect(source)) as source_database,
+        closing(sqlite3.connect(destination)) as backup,
+    ):
         source_database.backup(backup)
     backups = sorted(destination_directory.glob('d20-*.sqlite3'), reverse=True)
     for expired in backups[max(keep, 1) :]:

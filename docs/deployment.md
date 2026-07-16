@@ -153,8 +153,13 @@ GitHub Environment Variable `D20_BOT_WEB_PORT` задаёт внешний по�
 окружения. Workflow использует безопасные разные значения по умолчанию: `8191` для `dev` и `8190`
 для `prd`, чтобы два Compose-проекта могли одновременно работать на одном Raspberry Pi.
 
-Core публикует `GET /health`. Compose проверяет endpoint и переводит контейнер в `healthy`, а
-deployment workflow ждёт готовности всех активных сервисов до одной минуты. При ошибке в job
+Core публикует `GET /health`. Bot обновляет heartbeat-файл из asyncio event loop.
+Liveness-проверка считает процесс живым, если heartbeat не старше 20 секунд. Readiness дополнительно
+вызывает Telegram `getMe`; при ошибке выводит warning без токена и возвращает failure. Поэтом временная
+недоступность Telegram снимет Kubernetes readiness, но не вызовет liveness-рестарт. Compose использует
+полную readiness-проверку для статуса `healthy`.
+
+Deployment workflow ждёт готовности всех активных сервисов до одной минуты. При ошибке в job
 выводятся статусы и последние 100 строк логов.
 
 Автоматический rollback не выполняется: после запуска миграций старый образ может быть

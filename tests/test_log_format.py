@@ -25,6 +25,9 @@ def test_json_formatter_produces_valid_structured_log():
     record.error_type = 'BadRequest'
     record.error_message = 'Chat member is an administrator'
     record.tag = 'Мастер'
+    record.web_host = '127.0.0.1'
+    record.web_port = 8190
+    record.health_check = 'telegram_readiness'
 
     payload = json.loads(JsonFormatter().format(record))
 
@@ -39,6 +42,9 @@ def test_json_formatter_produces_valid_structured_log():
     assert payload['error_type'] == 'BadRequest'
     assert payload['error_message'] == 'Chat member is an administrator'
     assert payload['tag'] == 'Мастер'
+    assert payload['web_host'] == '127.0.0.1'
+    assert payload['web_port'] == 8190
+    assert payload['health_check'] == 'telegram_readiness'
     assert payload['datetime'].endswith('+00:00')
 
 
