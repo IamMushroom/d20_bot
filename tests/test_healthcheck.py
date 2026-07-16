@@ -81,3 +81,12 @@ def test_readiness_requires_fresh_heartbeat(monkeypatch, caplog):
 
     assert 'application heartbeat is stale' in caplog.text
     assert caplog.records[-1].health_check == 'heartbeat'
+
+
+def test_readiness_only_warns_when_telegram_is_unavailable(monkeypatch):
+    calls = []
+    monkeypatch.setattr(healthcheck, 'is_healthy', lambda: True)
+    monkeypatch.setattr(healthcheck, 'telegram_is_ready', lambda: calls.append('checked') and False)
+
+    assert healthcheck.readiness()
+    assert calls == ['checked']

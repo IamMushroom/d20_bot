@@ -12,4 +12,4 @@
 - [ ] `TECH-006` Не перемещать опубликованный тег `0.12.0`; инфраструктурные исправления после него
   выпускать следующей patch-версией.
 - [x] `TECH-007` Healthcheck для standalone контейнера: heartbeat asyncio event loop,
-  Telegram API readiness, Docker healthcheck и Kubernetes readiness/liveness probes.
+  warning-диагностика Telegram API, Docker healthcheck и Kubernetes readiness/liveness probes.

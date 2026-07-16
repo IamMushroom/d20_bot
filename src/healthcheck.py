@@ -94,7 +94,8 @@ def readiness() -> bool:
             extra={'health_check': 'heartbeat', 'error_type': 'StaleHeartbeat'},
         )
         return False
-    return telegram_is_ready()
+    telegram_is_ready()
+    return True
 
 
 def main() -> int:

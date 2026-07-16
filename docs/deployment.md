@@ -155,9 +155,9 @@ GitHub Environment Variable `D20_BOT_WEB_PORT` задаёт внешний по�
 
 Core публикует `GET /health`. Bot обновляет heartbeat-файл из asyncio event loop.
 Liveness-проверка считает процесс живым, если heartbeat не старше 20 секунд. Readiness дополнительно
-вызывает Telegram `getMe`; при ошибке выводит warning без токена и возвращает failure. Поэтом временная
-недоступность Telegram снимет Kubernetes readiness, но не вызовет liveness-рестарт. Compose использует
-полную readiness-проверку для статуса `healthy`.
+вызывает Telegram `getMe`. Ошибка Telegram записывается как структурированный warning без токена,
+но не меняет exit code: внешний сбой не должен валить deploy или вызывать рестарт. В Compose и
+Kubernetes статус готовности определяется свежестью heartbeat.
 
 Deployment workflow ждёт готовности всех активных сервисов до одной минуты. При ошибке в job
 выводятся статусы и последние 100 строк логов.
