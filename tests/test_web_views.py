@@ -31,6 +31,8 @@ def test_page_response_escapes_plain_content():
     assert headers == {}
     assert b'&lt;script&gt;bad&lt;/script&gt;' in content
     assert b'<script>bad</script>' not in content
+    assert b'message--error' in content
+    assert b'400' in content
 
 
 def test_dashboard_response_escapes_campaign_and_character_data():
@@ -49,6 +51,8 @@ def test_dashboard_response_escapes_campaign_and_character_data():
     assert b'&lt;Tilly&gt;' in response[2]
     assert b'a=1&amp;b=2' in response[2]
     assert 'Начать сессию'.encode() in response[2]
+    assert b'class="grid"' in response[2]
+    assert b'class="card card--wide"' in response[2]
 
 
 def test_dashboard_response_renders_active_and_empty_campaign_states():
@@ -59,4 +63,5 @@ def test_dashboard_response_renders_active_and_empty_campaign_states():
     assert 'Активная сессия №2'.encode() in active[2]
     assert b'&lt;Tower&gt;' in active[2]
     assert 'Состав кампании не найден'.encode() in active[2]
-    assert 'Игра не назначена'.encode() in active[2]
+    assert 'Игра пока не назначена'.encode() in active[2]
+    assert b'badge--success' in active[2]

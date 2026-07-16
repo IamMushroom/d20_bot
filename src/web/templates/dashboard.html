@@ -1,45 +1,68 @@
 {% extends "base.html" %}
 
-{% block title %}{{ title }} — D20 Admin{% endblock %}
+{% block title %}{{ title }} — D20 Control{% endblock %}
 
 {% block content %}
-  <h1>{{ title }}</h1>
+  <header class="hero">
+    <p class="eyebrow">Панель мастера</p>
+    <h1>{{ title }}</h1>
+    <p class="muted">Расписание, игровая сессия и состав кампании в одном месте.</p>
+  </header>
 
-  {% if roster %}
-    <h2>Состав</h2>
-    <p>Мастер: Telegram ID {{ roster.campaign.master_user_id or "не назначен" }}</p>
-    <ul>
-      {% for character in roster.characters %}
-        <li>{{ character.name }}</li>
+  <div class="grid">
+    <section class="card card--wide">
+      <div class="card__header">
+        <h2>Следующая игра</h2>
+        {% if planned_message %}<span class="badge">Запланирована</span>{% endif %}
+      </div>
+      {% if planned_message %}
+        <div class="schedule">{% for line in planned_message.splitlines() %}{{ line }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>
       {% else %}
-        <li>Игроки не зарегистрированы</li>
-      {% endfor %}
-    </ul>
-  {% else %}
-    <p>Состав кампании не найден.</p>
-  {% endif %}
+        <div class="empty">Игра пока не назначена. Заполните форму ниже, чтобы опубликовать расписание.</div>
+      {% endif %}
+    </section>
 
-  {% if planned_message %}
-    <p>{% for line in planned_message.splitlines() %}{{ line }}{% if not loop.last %}<br>{% endif %}{% endfor %}</p>
-  {% else %}
-    <p>Игра не назначена.</p>
-  {% endif %}
+    <section class="card">
+      <div class="card__header">
+        <h2>Игровая сессия</h2>
+        {% if active %}<span class="badge badge--success">В процессе</span>{% else %}<span class="badge">Не начата</span>{% endif %}
+      </div>
+      {% if active %}
+        <p><strong>Активная сессия №{{ active.number }}</strong>{% if active.title %}<br><span class="muted">{{ active.title }}</span>{% endif %}</p>
+        <form method="post" action="/session/stop">
+          <button class="button--danger" type="submit">⏹️ Завершить сессию</button>
+        </form>
+      {% else %}
+        <form method="post" action="/session/start">
+          <label>Название сессии <input name="title" maxlength="100" placeholder="Например, Башня мага"></label>
+          <button type="submit">▶️ Начать сессию</button>
+        </form>
+      {% endif %}
+    </section>
 
-  {% if active %}
-    <p>▶️ Активная сессия №{{ active.number }}{% if active.title %} — {{ active.title }}{% endif %}</p>
-    <form method="post" action="/session/stop">
-      <button type="submit">⏹️ Завершить сессию</button>
-    </form>
-  {% else %}
-    <form method="post" action="/session/start">
-      <label>Название сессии <input name="title" maxlength="100"></label>
-      <button type="submit">▶️ Начать сессию</button>
-    </form>
-  {% endif %}
+    <section class="card">
+      <div class="card__header"><h2>Состав</h2></div>
+      {% if roster %}
+        <p class="muted">Мастер: Telegram ID {{ roster.campaign.master_user_id or "не назначен" }}</p>
+        <ul class="roster">
+          {% for character in roster.characters %}
+            <li>{{ character.name }}</li>
+          {% else %}
+            <li>Игроки не зарегистрированы</li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <div class="empty">Состав кампании не найден.</div>
+      {% endif %}
+    </section>
 
-  <form method="post" action="/schedule">
-    <label>Дата и время <input required type="datetime-local" name="scheduled_at"></label>
-    <label>Foundry URL <input required type="url" name="foundry_url" value="{{ default_url }}"></label>
-    <button type="submit">Сохранить и опубликовать</button>
-  </form>
+    <section class="card card--wide">
+      <div class="card__header"><h2>Изменить расписание</h2></div>
+      <form class="form-grid" method="post" action="/schedule">
+        <label>Дата и время <input required type="datetime-local" name="scheduled_at"></label>
+        <label>Foundry URL <input required type="url" name="foundry_url" value="{{ default_url }}" placeholder="https://foundry.example"></label>
+        <button type="submit">Сохранить и опубликовать</button>
+      </form>
+    </section>
+  </div>
 {% endblock %}

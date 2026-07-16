@@ -2,16 +2,84 @@
 <html lang="ru">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
     <title>{% block title %}D20 Admin{% endblock %}</title>
     <style>
-      body { font: 16px system-ui; max-width: 42rem; margin: 3rem auto; padding: 0 1rem; background: #17151c; color: #eee; }
-      label, input, button { display: block; width: 100%; box-sizing: border-box; margin: .8rem 0; }
-      input, button { padding: .7rem; }
-      button { cursor: pointer; }
+      :root {
+        --bg: #100f16;
+        --surface: #1a1823;
+        --surface-raised: #24212f;
+        --border: #373247;
+        --text: #f4f1fb;
+        --muted: #aaa4ba;
+        --accent: #a98bff;
+        --accent-strong: #c4b1ff;
+        --success: #69d49a;
+        --danger: #ff858f;
+        --shadow: 0 18px 50px rgba(0, 0, 0, .28);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: var(--text);
+        background: var(--bg);
+      }
+      * { box-sizing: border-box; }
+      body { min-width: 18rem; margin: 0; background: radial-gradient(circle at 80% -10%, #2b214a 0, transparent 32rem), var(--bg); color: var(--text); }
+      a { color: var(--accent-strong); }
+      .site-header { border-bottom: 1px solid rgba(255, 255, 255, .07); background: rgba(16, 15, 22, .82); backdrop-filter: blur(12px); }
+      .site-header__inner, .page { width: min(100% - 2rem, 68rem); margin-inline: auto; }
+      .site-header__inner { min-height: 4rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+      .brand { display: inline-flex; align-items: center; gap: .65rem; color: var(--text); font-weight: 800; text-decoration: none; letter-spacing: .02em; }
+      .brand__mark { display: grid; place-items: center; width: 2rem; aspect-ratio: 1; border-radius: .65rem; background: linear-gradient(135deg, var(--accent), #6d4bd2); box-shadow: 0 8px 22px rgba(126, 91, 220, .35); }
+      .nav-link { color: var(--muted); text-decoration: none; font-size: .92rem; }
+      .nav-link:hover { color: var(--text); }
+      .page { padding-block: clamp(1.5rem, 4vw, 3.5rem); }
+      .hero { margin-bottom: 1.5rem; }
+      .eyebrow { margin: 0 0 .4rem; color: var(--accent-strong); font-size: .78rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+      h1, h2, p { margin-top: 0; }
+      h1 { margin-bottom: .45rem; font-size: clamp(1.75rem, 5vw, 2.75rem); line-height: 1.1; }
+      h2 { margin-bottom: 1rem; font-size: 1.1rem; }
+      .muted { color: var(--muted); }
+      .grid { display: grid; gap: 1rem; }
+      .card { min-width: 0; padding: clamp(1rem, 3vw, 1.4rem); border: 1px solid var(--border); border-radius: 1.15rem; background: linear-gradient(145deg, rgba(36, 33, 47, .96), rgba(26, 24, 35, .96)); box-shadow: var(--shadow); }
+      .card__header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+      .card__header h2 { margin: 0; }
+      .badge { display: inline-flex; align-items: center; gap: .4rem; padding: .3rem .62rem; border-radius: 999px; background: rgba(169, 139, 255, .13); color: var(--accent-strong); font-size: .78rem; font-weight: 750; white-space: nowrap; }
+      .badge--success { background: rgba(105, 212, 154, .13); color: var(--success); }
+      .schedule { padding: .85rem 1rem; border-left: 3px solid var(--accent); border-radius: .25rem .8rem .8rem .25rem; background: rgba(169, 139, 255, .08); line-height: 1.55; overflow-wrap: anywhere; }
+      .empty { padding: 1rem; border: 1px dashed var(--border); border-radius: .8rem; color: var(--muted); text-align: center; }
+      .roster { display: flex; flex-wrap: wrap; gap: .55rem; padding: 0; margin: 0; list-style: none; }
+      .roster li { padding: .48rem .72rem; border-radius: .7rem; background: rgba(255, 255, 255, .055); }
+      form { display: grid; gap: .9rem; }
+      label { display: grid; gap: .42rem; color: var(--muted); font-size: .88rem; font-weight: 650; }
+      input, button { width: 100%; min-height: 2.8rem; border-radius: .75rem; font: inherit; }
+      input { border: 1px solid var(--border); padding: .72rem .82rem; background: #121019; color: var(--text); outline: none; }
+      input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(169, 139, 255, .16); }
+      button { border: 0; padding: .72rem 1rem; background: linear-gradient(135deg, var(--accent), #8060df); color: #130d22; font-weight: 800; cursor: pointer; }
+      button:hover { filter: brightness(1.08); }
+      button:focus-visible, a:focus-visible { outline: 3px solid var(--accent-strong); outline-offset: 3px; }
+      .button--danger { background: rgba(255, 133, 143, .12); color: var(--danger); border: 1px solid rgba(255, 133, 143, .3); }
+      .message { max-width: 34rem; margin: clamp(2rem, 10vh, 7rem) auto; text-align: center; }
+      .message__icon { display: grid; place-items: center; width: 3.5rem; margin: 0 auto 1rem; aspect-ratio: 1; border-radius: 1rem; background: rgba(169, 139, 255, .13); font-size: 1.6rem; }
+      .message--error .message__icon { background: rgba(255, 133, 143, .12); }
+      .message__actions { margin-top: 1.4rem; }
+      @media (min-width: 48rem) {
+        .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .card--wide { grid-column: 1 / -1; }
+        .form-grid { grid-template-columns: 1fr 1.35fr; align-items: end; }
+        .form-grid button { grid-column: 1 / -1; width: auto; justify-self: end; min-width: 14rem; }
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        button, input, a { transition: color .16s ease, border-color .16s ease, box-shadow .16s ease, filter .16s ease; }
+      }
     </style>
   </head>
   <body>
-    <main>{% block content %}{% endblock %}</main>
+    <header class="site-header">
+      <div class="site-header__inner">
+        <a class="brand" href="/"><span class="brand__mark">20</span><span>D20 Control</span></a>
+        <a class="nav-link" href="/">Панель кампании</a>
+      </div>
+    </header>
+    <main class="page">{% block content %}{% endblock %}</main>
   </body>
 </html>

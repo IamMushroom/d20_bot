@@ -15,7 +15,13 @@ TEMPLATES = Environment(
 
 
 def page_response(status: HTTPStatus, content: str) -> tuple[HTTPStatus, dict[str, str], bytes]:
-    return status, {}, TEMPLATES.get_template('message.html').render(content=content).encode()
+    document = TEMPLATES.get_template('message.html').render(
+        content=content,
+        status_code=status.value,
+        title=status.phrase,
+        is_error=status.value >= 400,
+    )
+    return status, {}, document.encode()
 
 
 def dashboard_response(

@@ -1,3 +1,13 @@
 {% extends "base.html" %}
 
-{% block content %}<p>{{ content }}</p>{% endblock %}
+{% block title %}{{ title }} — D20 Control{% endblock %}
+
+{% block content %}
+  <section class="card message{% if is_error %} message--error{% endif %}">
+    <div class="message__icon">{% if is_error %}⚠️{% else %}ℹ️{% endif %}</div>
+    <p class="eyebrow">{{ status_code }}</p>
+    <h1>{{ title }}</h1>
+    <p class="muted">{{ content }}</p>
+    <div class="message__actions"><a href="/">Вернуться в панель</a></div>
+  </section>
+{% endblock %}

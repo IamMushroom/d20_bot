@@ -7,8 +7,10 @@
 
 - [x] `WEB-001` Отделить HTML/CSS от HTTP routing в `src/web/server.py`: Jinja environment
   и файловые шаблоны вынесены в `src/web/views.py` и `src/web/templates/`.
-- [ ] `WEB-002` Сделать адаптивную структуру страниц для телефона и desktop.
-- [ ] `WEB-003` Добавить единый layout, навигацию, состояния ошибок и пустых списков.
+- [x] `WEB-002` Сделать адаптивную структуру страниц для телефона и desktop: mobile-first карточки
+  перестраиваются в двухколоночную сетку на широких экранах.
+- [x] `WEB-003` Добавить единый layout, навигацию, состояния ошибок и пустых списков: общий header,
+  dashboard-карточки и message page используют одну визуальную систему.
 - [x] `WEB-004` Сохранить реализацию без тяжёлого frontend toolchain: server-side Jinja
   не требует Node.js или сборки frontend assets.
 

@@ -8,6 +8,8 @@
 
 - `WEB-001`, `WEB-004`: HTML/CSS вынесены из HTTP routing в Jinja-шаблоны с autoescape
   и inheritance, без frontend toolchain.
+- `WEB-002`, `WEB-003`: панель получила адаптивный mobile-first layout, общую навигацию, карточки,
+  улучшенные формы и отдельные состояния ошибок и пустых данных.
 
 ### Fixed
 
