@@ -177,6 +177,78 @@ def test_local_web_registration_and_login(tmp_path):
     assert login[0] == HTTPStatus.SEE_OTHER
 
 
+def test_local_web_auth_errors_and_registration_api(tmp_path):
+    async def scenario():
+        database, campaigns, sessions, access, bot = await setup(tmp_path)
+        identities = SQLiteLocalIdentityProvider(database)
+        server = AdminWebServer(
+            access, campaigns, sessions, bot, identities, internal_token='secret'
+        )
+        headers = {'authorization': 'Bearer secret'}
+        pages = [
+            await server._route('GET', '/login', {}, b''),
+            await server._route('GET', '/register?code=TEST', {}, b''),
+            await server._route(
+                'POST', '/register', {}, b'code=bad&login=user&password=long-password'
+            ),
+            await server._route(
+                'POST', '/register', {}, b'code=bad&login=not+valid&password=long-password'
+            ),
+            await server._route('POST', '/api/auth/registration', {}, b'user_id=7'),
+            await server._route('POST', '/api/auth/registration', headers, b'user_id=bad'),
+            await server._route('POST', '/api/auth/registration', headers, b'user_id=404'),
+            await server._route('POST', '/api/auth/registration', headers, b'user_id=7'),
+        ]
+        disabled = AdminWebServer(access, campaigns, sessions, bot, internal_token='secret')
+        pages.extend(
+            [
+                await disabled._route('POST', '/login', {}, b'login=x&password=y'),
+                await disabled._route('POST', '/register', {}, b'code=x'),
+                await disabled._route('POST', '/api/auth/registration', headers, b'user_id=7'),
+            ]
+        )
+        await database.close()
+        return pages
+
+    pages = asyncio.run(scenario())
+    assert [page[0] for page in pages] == [
+        HTTPStatus.OK,
+        HTTPStatus.OK,
+        HTTPStatus.BAD_REQUEST,
+        HTTPStatus.BAD_REQUEST,
+        HTTPStatus.UNAUTHORIZED,
+        HTTPStatus.BAD_REQUEST,
+        HTTPStatus.NOT_FOUND,
+        HTTPStatus.OK,
+        HTTPStatus.SERVICE_UNAVAILABLE,
+        HTTPStatus.SERVICE_UNAVAILABLE,
+        HTTPStatus.SERVICE_UNAVAILABLE,
+    ]
+
+
+def test_web_register_command_handles_missing_context_and_core_error():
+    async def scenario():
+        bot = SimpleNamespace(send_message=AsyncMock())
+        empty = SimpleNamespace(effective_message=None, effective_user=None)
+        context = SimpleNamespace(
+            bot=bot, application=SimpleNamespace(bot_data={CORE_CLIENT_KEY: None})
+        )
+        await web_register(empty, context)
+        update = SimpleNamespace(
+            effective_message=SimpleNamespace(id=1, chat_id=7),
+            effective_user=SimpleNamespace(id=7),
+        )
+        await web_register(update, context)
+        context.application.bot_data[CORE_CLIENT_KEY] = SimpleNamespace(
+            create_registration_code=AsyncMock(side_effect=CoreClientError('offline'))
+        )
+        await web_register(update, context)
+        return bot
+
+    bot = asyncio.run(scenario())
+    bot.send_message.assert_awaited_once()
+
+
 def test_admin_command_validates_configuration_and_master(tmp_path):
     async def scenario():
         database, campaigns, _sessions, access, bot = await setup(tmp_path)

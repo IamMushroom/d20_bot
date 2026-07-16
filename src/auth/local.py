@@ -64,14 +64,14 @@ class SQLiteLocalIdentityProvider:
         password_hash = await asyncio.to_thread(_password_hash, password, salt)
         try:
             await self._database.execute(
-                '''INSERT INTO local_accounts (
+                """INSERT INTO local_accounts (
                     telegram_user_id, login, login_key, password_salt, password_hash,
                     created_at, updated_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(telegram_user_id) DO UPDATE SET
                     login = excluded.login, login_key = excluded.login_key,
                     password_salt = excluded.password_salt,
-                    password_hash = excluded.password_hash, updated_at = excluded.updated_at''',
+                    password_hash = excluded.password_hash, updated_at = excluded.updated_at""",
                 (
                     telegram_user_id,
                     login,

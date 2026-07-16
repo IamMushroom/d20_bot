@@ -194,9 +194,7 @@ class AdminWebServer:
                     form.get('password', [''])[0],
                 )
             except InvalidRegistrationCode:
-                return login_response(
-                    error='Код недействителен или просрочен.', registration=True
-                )
+                return login_response(error='Код недействителен или просрочен.', registration=True)
             except LoginAlreadyExists:
                 return login_response(error='Этот логин уже занят.', registration=True)
             except AuthenticationError:
@@ -302,7 +300,9 @@ class AdminWebServer:
     ) -> tuple[HTTPStatus, dict[str, str], bytes]:
         campaigns = await self._campaigns.list_for_user(user_id)
         initial_chat_id = campaigns[0].chat_id if campaigns else 0
-        session_id = await self._access.create_session(AdminIdentity(initial_chat_id, user_id, None))
+        session_id = await self._access.create_session(
+            AdminIdentity(initial_chat_id, user_id, None)
+        )
         return (
             HTTPStatus.SEE_OTHER,
             {

@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from auth import (
+    AuthenticationError,
     InvalidRegistrationCode,
     LoginAlreadyExists,
     SQLiteLocalIdentityProvider,
@@ -70,3 +71,31 @@ def test_registration_requires_known_telegram_user(tmp_path):
         await database.close()
 
     asyncio.run(scenario())
+
+
+def test_local_auth_rejects_invalid_credentials_and_allows_password_reset(tmp_path):
+    async def scenario():
+        database = await SQLiteDatabase.connect(str(tmp_path / 'auth.sqlite3'))
+        await apply_migrations(database, MIGRATIONS)
+        await database.execute(
+            "INSERT INTO users (telegram_user_id, created_at) VALUES (7, '2026-01-01T00:00:00+00:00')"
+        )
+        auth = SQLiteLocalIdentityProvider(database)
+        code = await auth.issue_registration_code(7)
+        with pytest.raises(AuthenticationError):
+            await auth.register(code, 'bad login', 'long-enough-password')
+        code = await auth.issue_registration_code(7)
+        with pytest.raises(AuthenticationError):
+            await auth.register(code, 'valid', 'short')
+        code = await auth.issue_registration_code(7)
+        await auth.register(code, 'first-login', 'first-long-password')
+        reset = await auth.issue_registration_code(7)
+        await auth.register(reset, 'second-login', 'second-long-password')
+        missing = await auth.authenticate('missing', 'any-long-password')
+        too_long = await auth.authenticate('second-login', 'x' * 257)
+        old = await auth.authenticate('first-login', 'first-long-password')
+        current = await auth.authenticate('second-login', 'second-long-password')
+        await database.close()
+        return missing, too_long, old, current
+
+    assert asyncio.run(scenario()) == (None, None, None, 7)
