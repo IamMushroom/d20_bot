@@ -4,6 +4,7 @@ from pathlib import Path
 from database import Database, apply_migrations, create_database
 from services import CampaignService, OutboxService, SessionService
 from web import AdminAccessService, AdminWebServer
+from web.session_store import SQLiteWebSessionStore
 
 
 @dataclass(slots=True)
@@ -33,7 +34,7 @@ class CoreRuntime:
             campaigns = CampaignService(database)
             sessions = SessionService(database)
             outbox = OutboxService(database)
-            access = AdminAccessService()
+            access = AdminAccessService(SQLiteWebSessionStore(database))
             web_server = AdminWebServer(
                 access,
                 campaigns,

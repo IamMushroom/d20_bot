@@ -70,7 +70,7 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         return
     access: AdminAccessService = context.application.bot_data[ADMIN_ACCESS_KEY]
-    token = access.create_login(AdminIdentity(chat.id, user.id, getattr(chat, 'title', None)))
+    token = await access.create_login(AdminIdentity(chat.id, user.id, getattr(chat, 'title', None)))
     url = f'{base_url.rstrip("/")}/login?{urlencode({"token": token})}'
     await _send_admin_link(update, context, url)
 

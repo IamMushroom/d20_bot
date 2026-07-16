@@ -13,6 +13,7 @@ from core.events import poll_events, process_event
 from database import SQLiteDatabase, apply_migrations
 from services import CampaignService, OutboxService, SessionService
 from web import AdminAccessService, AdminWebServer
+from web.session_store import SQLiteWebSessionStore
 
 MIGRATIONS = Path(__file__).resolve().parent.parent / 'migrations'
 
@@ -114,7 +115,7 @@ def test_internal_events_api(tmp_path):
         await apply_migrations(database, MIGRATIONS)
         outbox = OutboxService(database)
         server = AdminWebServer(
-            AdminAccessService(),
+            AdminAccessService(SQLiteWebSessionStore(database)),
             CampaignService(database),
             SessionService(database),
             outbox,

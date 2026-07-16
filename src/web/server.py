@@ -150,7 +150,7 @@ class AdminWebServer:
             return await self._events_api(headers, parse_qs(body.decode()))
         if method == 'GET' and url.path == '/login':
             token = parse_qs(url.query).get('token', [''])[0]
-            session_id = self._access.consume_login(token)
+            session_id = await self._access.consume_login(token)
             if session_id is None:
                 return page_response(
                     HTTPStatus.UNAUTHORIZED, 'Ссылка недействительна или уже использована.'
@@ -167,12 +167,12 @@ class AdminWebServer:
             return HTTPStatus.SEE_OTHER, {'Location': '/campaigns', 'Set-Cookie': cookie}, b''
 
         session_id = self._cookie(headers, 'd20_admin')
-        identity = self._access.authenticate(session_id)
+        identity = await self._access.authenticate(session_id)
         if identity is None:
             return page_response(HTTPStatus.UNAUTHORIZED, 'Запросите новую ссылку командой /admin.')
         form = parse_qs(body.decode()) if method == 'POST' else {}
         if method == 'POST':
-            expected = self._access.csrf_token(session_id)
+            expected = await self._access.csrf_token(session_id)
             supplied = form.get('csrf_token', [''])[0]
             if expected is None or not secrets.compare_digest(expected, supplied):
                 return page_response(
@@ -193,7 +193,7 @@ class AdminWebServer:
                 return page_response(HTTPStatus.FORBIDDEN, 'Недостаточно прав в этой кампании.')
             selected_identity = AdminIdentity(chat_id, identity.user_id, None)
         if method == 'POST' and url.path == '/logout':
-            self._access.revoke(session_id)
+            await self._access.revoke(session_id)
             return (
                 HTTPStatus.SEE_OTHER,
                 {
@@ -206,9 +206,9 @@ class AdminWebServer:
             revocation_id = form.get('revocation_id', [''])[0]
             current = any(
                 session.current and session.revocation_id == revocation_id
-                for session in self._access.list_sessions(identity, session_id)
+                for session in await self._access.list_sessions(identity, session_id)
             )
-            if not revocation_id or not self._access.revoke_by_id(identity, revocation_id):
+            if not revocation_id or not await self._access.revoke_by_id(identity, revocation_id):
                 return page_response(HTTPStatus.NOT_FOUND, 'Активная сессия не найдена.')
             headers_out = {'Location': '/sessions'}
             if current:
@@ -232,7 +232,7 @@ class AdminWebServer:
             return campaigns_response(
                 await self._campaigns.list_for_user(identity.user_id),
                 identity.chat_id,
-                self._access.csrf_token(session_id) or '',
+                await self._access.csrf_token(session_id) or '',
             )
         if method == 'GET' and url.path == '/settings':
             try:
@@ -244,8 +244,8 @@ class AdminWebServer:
             return await self._settings(AdminIdentity(chat_id, identity.user_id, None), session_id)
         if method == 'GET' and url.path == '/sessions':
             return sessions_response(
-                self._access.list_sessions(identity, session_id),
-                self._access.csrf_token(session_id) or '',
+                await self._access.list_sessions(identity, session_id),
+                await self._access.csrf_token(session_id) or '',
             )
         if method == 'POST' and url.path == '/settings':
             return await self._save_settings(selected_identity, form)
@@ -273,7 +273,7 @@ class AdminWebServer:
         base_url = await self._sessions.get_web_base_url(chat_id) or self._web_base_url
         if not base_url:
             return self._json(HTTPStatus.CONFLICT, {'error': 'web_url_not_configured'})
-        token = self._access.create_login(AdminIdentity(chat_id, user_id, chat_title))
+        token = await self._access.create_login(AdminIdentity(chat_id, user_id, chat_title))
         return self._json(
             HTTPStatus.OK,
             {'url': f'{base_url.rstrip("/")}/login?token={token}'},
@@ -498,7 +498,7 @@ class AdminWebServer:
             default_url,
             history,
             timezone_name,
-            self._access.csrf_token(session_id) or '',
+            await self._access.csrf_token(session_id) or '',
             role,
         )
 
@@ -547,7 +547,7 @@ class AdminWebServer:
             title,
             default_url,
             timezone_name,
-            self._access.csrf_token(session_id) or '',
+            await self._access.csrf_token(session_id) or '',
             identity.chat_id,
         )
 

@@ -1,22 +1,9 @@
+import hashlib
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-
-@dataclass(frozen=True, slots=True)
-class AdminIdentity:
-    chat_id: int
-    user_id: int
-    chat_title: str | None
-
-
-@dataclass(frozen=True, slots=True)
-class WebSession:
-    identity: AdminIdentity
-    created_at: datetime
-    expires_at: datetime
-    csrf_token: str
-    revocation_id: str
+from web.session_store import AdminIdentity, StoredWebSession, WebSessionStore
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,79 +14,76 @@ class ActiveWebSession:
     current: bool
 
 
-class AdminAccessService:
-    def __init__(self) -> None:
-        self._logins: dict[str, tuple[AdminIdentity, datetime]] = {}
-        self._sessions: dict[str, WebSession] = {}
+def _hash(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
 
-    def create_login(self, identity: AdminIdentity) -> str:
-        self._purge()
+
+class AdminAccessService:
+    def __init__(self, store: WebSessionStore) -> None:
+        self._store = store
+
+    async def create_login(self, identity: AdminIdentity) -> str:
+        now = datetime.now(UTC)
+        await self._store.purge(now)
         token = secrets.token_urlsafe(32)
-        self._logins[token] = (identity, datetime.now(UTC) + timedelta(minutes=15))
+        await self._store.save_login(_hash(token), identity, now + timedelta(minutes=15))
         return token
 
-    def consume_login(self, token: str) -> str | None:
-        self._purge()
-        login = self._logins.pop(token, None)
-        if login is None:
+    async def consume_login(self, token: str) -> str | None:
+        now = datetime.now(UTC)
+        identity = await self._store.consume_login(_hash(token), now)
+        if identity is None:
             return None
         session_id = secrets.token_urlsafe(32)
-        now = datetime.now(UTC)
-        self._sessions[session_id] = WebSession(
-            identity=login[0],
-            created_at=now,
-            expires_at=now + timedelta(hours=8),
-            csrf_token=secrets.token_urlsafe(32),
-            revocation_id=secrets.token_urlsafe(18),
+        await self._store.save_session(
+            _hash(session_id),
+            StoredWebSession(
+                identity=identity,
+                created_at=now,
+                expires_at=now + timedelta(hours=8),
+                csrf_token=secrets.token_urlsafe(32),
+                revocation_id=secrets.token_urlsafe(18),
+            ),
         )
         return session_id
 
-    def authenticate(self, session_id: str | None) -> AdminIdentity | None:
-        self._purge()
-        session = self._sessions.get(session_id or '')
-        return session.identity if session is not None else None
+    async def authenticate(self, session_id: str | None) -> AdminIdentity | None:
+        session = await self._session(session_id)
+        return session.identity if session else None
 
-    def csrf_token(self, session_id: str | None) -> str | None:
-        self._purge()
-        session = self._sessions.get(session_id or '')
-        return session.csrf_token if session is not None else None
+    async def csrf_token(self, session_id: str | None) -> str | None:
+        session = await self._session(session_id)
+        return session.csrf_token if session else None
 
-    def revoke(self, session_id: str | None) -> None:
-        if session_id is not None:
-            self._sessions.pop(session_id, None)
+    async def revoke(self, session_id: str | None) -> None:
+        if session_id:
+            await self._store.delete_session(_hash(session_id))
 
-    def list_sessions(
+    async def list_sessions(
         self, identity: AdminIdentity, current_session_id: str
     ) -> tuple[ActiveWebSession, ...]:
-        self._purge()
-        sessions = (
+        sessions = await self._store.list_sessions(identity.user_id, datetime.now(UTC))
+        current = await self._session(current_session_id)
+        return tuple(
             ActiveWebSession(
                 revocation_id=session.revocation_id,
                 created_at=session.created_at,
                 expires_at=session.expires_at,
-                current=session_id == current_session_id,
+                current=(
+                    current is not None
+                    and secrets.compare_digest(session.revocation_id, current.revocation_id)
+                ),
             )
-            for session_id, session in self._sessions.items()
-            if session.identity.user_id == identity.user_id
+            for session in sessions
         )
-        return tuple(sorted(sessions, key=lambda session: session.created_at, reverse=True))
 
-    def revoke_by_id(self, identity: AdminIdentity, revocation_id: str) -> bool:
-        self._purge()
-        for session_id, session in self._sessions.items():
-            if (
-                secrets.compare_digest(session.revocation_id, revocation_id)
-                and session.identity.user_id == identity.user_id
-            ):
-                del self._sessions[session_id]
-                return True
-        return False
+    async def revoke_by_id(self, identity: AdminIdentity, revocation_id: str) -> bool:
+        return await self._store.delete_by_revocation_id(identity.user_id, revocation_id)
 
-    def _purge(self) -> None:
-        now = datetime.now(UTC)
-        self._logins = {token: value for token, value in self._logins.items() if value[1] > now}
-        self._sessions = {
-            session_id: value
-            for session_id, value in self._sessions.items()
-            if value.expires_at > now
-        }
+    async def _session(self, session_id: str | None) -> StoredWebSession | None:
+        if not session_id:
+            return None
+        return await self._store.get_session(_hash(session_id), datetime.now(UTC))
+
+
+__all__ = ['ActiveWebSession', 'AdminAccessService', 'AdminIdentity']

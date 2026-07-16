@@ -1,6 +1,5 @@
 import asyncio
 import json
-from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 from pathlib import Path
@@ -22,6 +21,7 @@ from database import SQLiteDatabase, apply_migrations
 from services import CampaignService, SessionService
 from web import AdminAccessService, AdminWebServer
 from web.access import AdminIdentity
+from web.session_store import SQLiteWebSessionStore
 
 MIGRATIONS = Path(__file__).resolve().parent.parent / 'migrations'
 
@@ -32,7 +32,7 @@ async def setup(tmp_path):
     campaigns = CampaignService(database)
     sessions = SessionService(database)
     await campaigns.assign_master(-100, 7, 'Campaign')
-    access = AdminAccessService()
+    access = AdminAccessService(SQLiteWebSessionStore(database))
     bot = SimpleNamespace(
         send_message=AsyncMock(return_value=SimpleNamespace(id=55)),
         pin_chat_message=AsyncMock(),
@@ -44,28 +44,72 @@ async def setup(tmp_path):
     return database, campaigns, sessions, access, bot
 
 
-def csrf_body(access, headers, body=b''):
+async def csrf_body(access, headers, body=b''):
     session_id = headers['cookie'].split('=', 1)[1]
-    token = access.csrf_token(session_id)
+    token = await access.csrf_token(session_id)
     assert token is not None
     return body + (b'&' if body else b'') + f'csrf_token={token}'.encode()
 
 
-def test_admin_access_uses_one_time_logins_and_expiring_sessions():
-    access = AdminAccessService()
-    identity = AdminIdentity(-100, 7, 'Campaign')
-    token = access.create_login(identity)
-    session_id = access.consume_login(token)
+def test_admin_access_uses_one_time_logins_and_expiring_sessions(tmp_path):
+    async def scenario():
+        database = await SQLiteDatabase.connect(str(tmp_path / 'access.sqlite3'))
+        await apply_migrations(database, MIGRATIONS)
+        access = AdminAccessService(SQLiteWebSessionStore(database))
+        identity = AdminIdentity(-100, 7, 'Campaign')
+        token = await access.create_login(identity)
+        issued_login_rows = await database.fetch_all('SELECT token_hash FROM web_login_tokens')
+        session_id = await access.consume_login(token)
+        assert session_id is not None
+        repeated = await access.consume_login(token)
+        authenticated = await access.authenticate(session_id)
+        restored = await AdminAccessService(SQLiteWebSessionStore(database)).authenticate(
+            session_id
+        )
+        empty = await access.authenticate(None)
+        login_rows = await database.fetch_all('SELECT token_hash FROM web_login_tokens')
+        session_rows = await database.fetch_all('SELECT session_hash FROM web_sessions')
+        await database.execute(
+            'UPDATE web_sessions SET expires_at = ?',
+            ((datetime.now(UTC) - timedelta(seconds=1)).isoformat(),),
+        )
+        expired = await access.authenticate(session_id)
+        await database.close()
+        return (
+            repeated,
+            authenticated,
+            restored,
+            empty,
+            expired,
+            identity,
+            token,
+            session_id,
+            login_rows,
+            issued_login_rows,
+            session_rows,
+        )
 
-    assert session_id is not None
-    assert access.consume_login(token) is None
-    assert access.authenticate(session_id) == identity
-    assert access.authenticate(None) is None
-
-    access._sessions[session_id] = replace(
-        access._sessions[session_id], expires_at=datetime.now(UTC) - timedelta(seconds=1)
-    )
-    assert access.authenticate(session_id) is None
+    (
+        repeated,
+        authenticated,
+        restored,
+        empty,
+        expired,
+        identity,
+        token,
+        session_id,
+        login_rows,
+        issued_login_rows,
+        session_rows,
+    ) = asyncio.run(scenario())
+    assert repeated is None
+    assert authenticated == identity
+    assert restored == identity
+    assert empty is None
+    assert expired is None
+    assert login_rows == []
+    assert issued_login_rows[0]['token_hash'] != token
+    assert session_rows[0]['session_hash'] not in {token, session_id}
 
 
 def test_admin_commands_ignore_updates_without_chat():
@@ -314,13 +358,13 @@ def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
         server = AdminWebServer(access, campaigns, sessions, bot)
         await campaigns.register_player(-100, 8, '<Tilly>')
         identity = AdminIdentity(-100, 7, 'Campaign')
-        token = access.create_login(identity)
+        token = await access.create_login(identity)
 
         health = await server._route('GET', '/health', {}, b'')
         javascript = await server._route('GET', '/static/app.js', {}, b'')
         unauthorized = await server._route('GET', '/', {}, b'')
         login = await server._route('GET', f'/login?token={token}', {}, b'')
-        secure_token = access.create_login(identity)
+        secure_token = await access.create_login(identity)
         secure_login = await server._route(
             'GET',
             f'/login?token={secure_token}',
@@ -336,13 +380,13 @@ def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
             'POST',
             '/schedule',
             headers,
-            csrf_body(access, headers, b'scheduled_at=nope&foundry_url=https%3A%2F%2Fx.test'),
+            await csrf_body(access, headers, b'scheduled_at=nope&foundry_url=https%3A%2F%2Fx.test'),
         )
         bad_url = await server._route(
             'POST',
             '/schedule',
             headers,
-            csrf_body(
+            await csrf_body(
                 access,
                 headers,
                 b'scheduled_at=2026-07-20T19%3A00%2B00%3A00&foundry_url=nope',
@@ -352,7 +396,7 @@ def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
             'POST',
             '/schedule',
             headers,
-            csrf_body(
+            await csrf_body(
                 access,
                 headers,
                 b'scheduled_at=2026-07-20T19%3A00%2B00%3A00&foundry_url=https%3A%2F%2Ffoundry.test',
@@ -408,7 +452,7 @@ def test_web_campaign_settings(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
         server = AdminWebServer(access, campaigns, sessions, bot)
-        token = access.create_login(AdminIdentity(-100, 7, 'Campaign'))
+        token = await access.create_login(AdminIdentity(-100, 7, 'Campaign'))
         login = await server._route('GET', f'/login?token={token}', {}, b'')
         headers = {'cookie': login[1]['Set-Cookie'].split(';', 1)[0]}
 
@@ -417,7 +461,7 @@ def test_web_campaign_settings(tmp_path):
             'POST',
             '/settings',
             headers,
-            csrf_body(
+            await csrf_body(
                 access,
                 headers,
                 b'title=New&foundry_url=nope&announcement_timezone=Moon%2FBase',
@@ -427,7 +471,7 @@ def test_web_campaign_settings(tmp_path):
             'POST',
             '/settings',
             headers,
-            csrf_body(
+            await csrf_body(
                 access,
                 headers,
                 b'title=New+Campaign&foundry_url=https%3A%2F%2Fvtt.example&announcement_timezone=Asia%2FYerevan',
@@ -456,12 +500,12 @@ def test_web_rejects_invalid_csrf_and_logs_out(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
         server = AdminWebServer(access, campaigns, sessions, bot)
-        token = access.create_login(AdminIdentity(-100, 7, 'Campaign'))
+        token = await access.create_login(AdminIdentity(-100, 7, 'Campaign'))
         login = await server._route('GET', f'/login?token={token}', {}, b'')
         headers = {'cookie': login[1]['Set-Cookie'].split(';', 1)[0]}
 
         rejected = await server._route('POST', '/session/start', headers, b'csrf_token=forged')
-        logout = await server._route('POST', '/logout', headers, csrf_body(access, headers))
+        logout = await server._route('POST', '/logout', headers, await csrf_body(access, headers))
         after = await server._route('GET', '/', headers, b'')
         await database.close()
         return rejected, logout, after
@@ -479,23 +523,25 @@ def test_web_lists_and_revokes_active_sessions(tmp_path):
         server = AdminWebServer(access, campaigns, sessions, bot)
         identity = AdminIdentity(-100, 7, 'Campaign')
 
-        first_token = access.create_login(identity)
+        first_token = await access.create_login(identity)
         first_login = await server._route('GET', f'/login?token={first_token}', {}, b'')
         first_headers = {'cookie': first_login[1]['Set-Cookie'].split(';', 1)[0]}
-        second_token = access.create_login(identity)
+        second_token = await access.create_login(identity)
         await server._route('GET', f'/login?token={second_token}', {}, b'')
 
-        listed = access.list_sessions(identity, first_headers['cookie'].split('=', 1)[1])
+        listed = await access.list_sessions(identity, first_headers['cookie'].split('=', 1)[1])
         other = next(session for session in listed if not session.current)
         page = await server._route('GET', '/sessions', first_headers, b'')
         revoked = await server._route(
             'POST',
             '/sessions/revoke',
             first_headers,
-            csrf_body(access, first_headers, f'revocation_id={other.revocation_id}'.encode()),
+            await csrf_body(access, first_headers, f'revocation_id={other.revocation_id}'.encode()),
         )
-        remaining = access.list_sessions(identity, first_headers['cookie'].split('=', 1)[1])
-        foreign = access.revoke_by_id(AdminIdentity(-200, 7, None), remaining[0].revocation_id)
+        remaining = await access.list_sessions(identity, first_headers['cookie'].split('=', 1)[1])
+        foreign = await access.revoke_by_id(
+            AdminIdentity(-200, 7, None), remaining[0].revocation_id
+        )
         await database.close()
         return listed, page, revoked, remaining, foreign
 
@@ -515,7 +561,7 @@ def test_web_user_can_switch_between_campaign_roles(tmp_path):
         await campaigns.assign_master(-200, 8, 'Second')
         await campaigns.register_player(-200, 7, 'Alice')
         server = AdminWebServer(access, campaigns, sessions, bot)
-        token = access.create_login(AdminIdentity(-100, 7, 'First'))
+        token = await access.create_login(AdminIdentity(-100, 7, 'First'))
         login = await server._route('GET', f'/login?token={token}', {}, b'')
         headers = {'cookie': login[1]['Set-Cookie'].split(';', 1)[0]}
 
@@ -526,7 +572,7 @@ def test_web_user_can_switch_between_campaign_roles(tmp_path):
             'POST',
             '/session/start',
             headers,
-            csrf_body(access, headers, b'chat_id=-200'),
+            await csrf_body(access, headers, b'chat_id=-200'),
         )
         foreign = await server._route('GET', '/?campaign=-300', headers, b'')
         invalid_query = await server._route('GET', '/?campaign=nope', headers, b'')
@@ -534,7 +580,7 @@ def test_web_user_can_switch_between_campaign_roles(tmp_path):
             'POST',
             '/session/start',
             headers,
-            csrf_body(access, headers, b'chat_id=nope'),
+            await csrf_body(access, headers, b'chat_id=nope'),
         )
         await database.close()
         return (
@@ -834,7 +880,7 @@ def test_web_session_lifecycle(tmp_path):
         database, campaigns, sessions, access, bot = await setup(tmp_path)
         server = AdminWebServer(access, campaigns, sessions, bot)
         identity = AdminIdentity(-100, 7, 'Campaign')
-        token = access.create_login(identity)
+        token = await access.create_login(identity)
         login = await server._route('GET', f'/login?token={token}', {}, b'')
         headers = {'cookie': login[1]['Set-Cookie'].split(';', 1)[0]}
 
@@ -842,26 +888,31 @@ def test_web_session_lifecycle(tmp_path):
             'POST',
             '/session/start',
             headers,
-            csrf_body(access, headers, f'title={"x" * 101}'.encode()),
+            await csrf_body(access, headers, f'title={"x" * 101}'.encode()),
         )
         started = await server._route(
-            'POST', '/session/start', headers, csrf_body(access, headers, 'title=Башня'.encode())
+            'POST',
+            '/session/start',
+            headers,
+            await csrf_body(access, headers, 'title=Башня'.encode()),
         )
         active_page = await server._route('GET', '/', headers, b'')
         duplicate = await server._route(
-            'POST', '/session/start', headers, csrf_body(access, headers)
+            'POST', '/session/start', headers, await csrf_body(access, headers)
         )
-        stopped = await server._route('POST', '/session/stop', headers, csrf_body(access, headers))
+        stopped = await server._route(
+            'POST', '/session/stop', headers, await csrf_body(access, headers)
+        )
         second_stop = await server._route(
-            'POST', '/session/stop', headers, csrf_body(access, headers)
+            'POST', '/session/stop', headers, await csrf_body(access, headers)
         )
         active = await sessions.get_active(-100)
         await campaigns.assign_master(-100, 8, 'Campaign')
         forbidden_start = await server._route(
-            'POST', '/session/start', headers, csrf_body(access, headers)
+            'POST', '/session/start', headers, await csrf_body(access, headers)
         )
         forbidden_stop = await server._route(
-            'POST', '/session/stop', headers, csrf_body(access, headers)
+            'POST', '/session/stop', headers, await csrf_body(access, headers)
         )
         await database.close()
         return (

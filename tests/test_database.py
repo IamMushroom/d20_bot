@@ -50,6 +50,7 @@ def test_migrations_are_idempotent(tmp_path):
         {'version': 7},
         {'version': 8},
         {'version': 9},
+        {'version': 10},
     ]
 
 
