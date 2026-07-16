@@ -27,6 +27,14 @@ def test_core_client_requests_admin_link(monkeypatch):
     assert b'chat_id=-100' in request.data
 
 
+def test_core_client_requests_registration_code(monkeypatch):
+    request = AsyncMock(return_value={'code': 'ABCD-EFGH-JKLM'})
+    monkeypatch.setattr(CoreClient, '_request', request)
+    code = asyncio.run(CoreClient('http://core', 'secret').create_registration_code(7))
+    assert code == 'ABCD-EFGH-JKLM'
+    request.assert_awaited_once_with('/api/auth/registration', {'user_id': 7})
+
+
 @pytest.mark.parametrize(
     ('error', 'message'),
     [

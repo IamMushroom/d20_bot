@@ -53,6 +53,10 @@ class CoreClient:
         )
         return self._string(payload, 'url')
 
+    async def create_registration_code(self, user_id: int) -> str:
+        payload = await self._request('/api/auth/registration', {'user_id': user_id})
+        return self._string(payload, 'code')
+
     async def get_game(self, chat_id: int) -> str:
         payload = await self._request('/api/game', {'action': 'get', 'chat_id': chat_id})
         return self._string(payload, 'message')

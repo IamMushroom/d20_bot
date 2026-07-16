@@ -32,6 +32,18 @@ def page_response(status: HTTPStatus, content: str) -> tuple[HTTPStatus, dict[st
     return status, {}, document.encode()
 
 
+def login_response(
+    *, error: str = '', registration: bool = False, code: str = ''
+) -> tuple[HTTPStatus, dict[str, str], bytes]:
+    document = TEMPLATES.get_template('login.html').render(
+        title='Регистрация' if registration else 'Вход',
+        error=error,
+        registration=registration,
+        code=code,
+    )
+    return (HTTPStatus.BAD_REQUEST if error else HTTPStatus.OK), {}, document.encode()
+
+
 def dashboard_response(
     identity: AdminIdentity,
     planned: Session | None,

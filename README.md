@@ -50,6 +50,7 @@ docker compose --profile platform up --build -d
 - [Установка, конфигурация и эксплуатация](docs/deployment.md)
 - [Архитектура Bot/Core](docs/architecture.md)
 - [База данных и репозитории](docs/database.md)
+- [Web-аутентификация и Telegram Login](docs/authentication.md)
 - [Разработка, тесты и CI/CD](docs/development.md)
 - [Helm chart](charts/d20-bot/README.md)
 - [Хотелки и технический backlog](todos/README.md)

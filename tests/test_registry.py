@@ -80,6 +80,7 @@ def test_connected_registry_only_adds_remote_commands():
         'master',
         'player',
         'web_url',
+        'web_register',
     }
     assert '/admin' in commands.help_message(core_connected=True)
     assert '/game' in commands.help_message(core_connected=True)

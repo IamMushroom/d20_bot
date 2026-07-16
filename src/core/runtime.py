@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+from auth import IdentityProvider, SQLiteLocalIdentityProvider
 from database import Database, apply_migrations, create_database
 from services import CampaignService, OutboxService, SessionService
 from web import AdminAccessService, AdminWebServer
@@ -14,6 +15,7 @@ class CoreRuntime:
     sessions: SessionService
     outbox: OutboxService
     access: AdminAccessService
+    identities: IdentityProvider
     web_server: AdminWebServer
     web_base_url: str
 
@@ -35,11 +37,13 @@ class CoreRuntime:
             sessions = SessionService(database)
             outbox = OutboxService(database)
             access = AdminAccessService(SQLiteWebSessionStore(database))
+            identities = SQLiteLocalIdentityProvider(database)
             web_server = AdminWebServer(
                 access,
                 campaigns,
                 sessions,
                 outbox,
+                identities,
                 internal_token=internal_token,
                 web_base_url=web_base_url,
             )
@@ -53,6 +57,7 @@ class CoreRuntime:
             sessions=sessions,
             outbox=outbox,
             access=access,
+            identities=identities,
             web_server=web_server,
             web_base_url=web_base_url,
         )

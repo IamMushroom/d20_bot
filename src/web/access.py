@@ -34,6 +34,11 @@ class AdminAccessService:
         identity = await self._store.consume_login(_hash(token), now)
         if identity is None:
             return None
+        return await self.create_session(identity)
+
+    async def create_session(self, identity: AdminIdentity) -> str:
+        now = datetime.now(UTC)
+        await self._store.purge(now)
         session_id = secrets.token_urlsafe(32)
         await self._store.save_session(
             _hash(session_id),

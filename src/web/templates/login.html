@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — D20 Control{% endblock %}
+
+{% block content %}
+  <section class="card message">
+    <p class="eyebrow">D20 Control</p>
+    <h1>{{ title }}</h1>
+    {% if error %}<p class="muted">⚠️ {{ error }}</p>{% endif %}
+    {% if registration %}
+      <p class="muted">Получите одноразовый код командой <code>/web_register</code> в Telegram.</p>
+      <form method="post" action="/register">
+        <label>Код из Telegram<input name="code" value="{{ code }}" required autocomplete="one-time-code"></label>
+        <label>Логин<input name="login" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_.-]+" autocomplete="username"></label>
+        <label>Пароль<input type="password" name="password" required minlength="10" maxlength="256" autocomplete="new-password"></label>
+        <button type="submit">Создать аккаунт</button>
+      </form>
+      <p class="message__actions"><a href="/login">Уже зарегистрированы? Войти</a></p>
+    {% else %}
+      <form method="post" action="/login">
+        <label>Логин<input name="login" required autocomplete="username"></label>
+        <label>Пароль<input type="password" name="password" required autocomplete="current-password"></label>
+        <button type="submit">Войти</button>
+      </form>
+      <p class="message__actions"><a href="/register">Создать аккаунт</a></p>
+    {% endif %}
+  </section>
+{% endblock %}

@@ -8,11 +8,13 @@ from unittest.mock import AsyncMock
 
 from telegram.error import BadRequest
 
+from auth import SQLiteLocalIdentityProvider
 from commands.admin_commands import (
     ADMIN_ACCESS_KEY,
     CORE_CLIENT_KEY,
     WEB_BASE_URL_KEY,
     admin,
+    web_register,
     web_url,
 )
 from commands.helpers import CAMPAIGN_SERVICE_KEY, SESSION_SERVICE_KEY
@@ -122,6 +124,57 @@ def test_admin_commands_ignore_updates_without_chat():
 
     bot = asyncio.run(scenario())
     bot.send_message.assert_not_awaited()
+
+
+def test_web_register_command_uses_core():
+    async def scenario():
+        bot = SimpleNamespace(send_message=AsyncMock())
+        client = SimpleNamespace(create_registration_code=AsyncMock(return_value='ABCD-EFGH-JKLM'))
+        update = SimpleNamespace(
+            effective_message=SimpleNamespace(id=1, chat_id=-100),
+            effective_user=SimpleNamespace(id=7),
+        )
+        context = SimpleNamespace(
+            bot=bot, application=SimpleNamespace(bot_data={CORE_CLIENT_KEY: client})
+        )
+        await web_register(update, context)
+        return bot, client
+
+    bot, client = asyncio.run(scenario())
+    client.create_registration_code.assert_awaited_once_with(7)
+    assert bot.send_message.await_count == 2
+    assert 'ABCD-EFGH-JKLM' in bot.send_message.await_args_list[0].kwargs['text']
+
+
+def test_local_web_registration_and_login(tmp_path):
+    async def scenario():
+        database, campaigns, sessions, access, bot = await setup(tmp_path)
+        identities = SQLiteLocalIdentityProvider(database)
+        server = AdminWebServer(access, campaigns, sessions, bot, identities)
+        code = await identities.issue_registration_code(7)
+        registration = await server._route(
+            'POST',
+            '/register',
+            {},
+            f'code={code}&login=master&password=long-enough-password'.encode(),
+        )
+        cookie = registration[1]['Set-Cookie'].split(';', 1)[0]
+        campaigns_page = await server._route('GET', '/campaigns', {'cookie': cookie}, b'')
+        bad_login = await server._route(
+            'POST', '/login', {}, b'login=master&password=wrong-password'
+        )
+        login = await server._route(
+            'POST', '/login', {}, b'login=MASTER&password=long-enough-password'
+        )
+        await database.close()
+        return registration, campaigns_page, bad_login, login
+
+    registration, campaigns_page, bad_login, login = asyncio.run(scenario())
+    assert registration[0] == HTTPStatus.SEE_OTHER
+    assert campaigns_page[0] == HTTPStatus.OK
+    assert b'Campaign' in campaigns_page[2]
+    assert bad_login[0] == HTTPStatus.BAD_REQUEST
+    assert login[0] == HTTPStatus.SEE_OTHER
 
 
 def test_admin_command_validates_configuration_and_master(tmp_path):

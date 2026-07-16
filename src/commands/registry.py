@@ -2,7 +2,7 @@ from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from typing import Any
 
-from commands.admin_commands import admin, web_url
+from commands.admin_commands import admin, web_register, web_url
 from commands.duality_commands import duality
 from commands.game_config_commands import game_url
 from commands.game_schedule_commands import game
@@ -28,6 +28,12 @@ class CommandSpec:
 
 
 COMMANDS = (
+    CommandSpec(
+        name='web_register',
+        callback=web_register,
+        menu_description='создать локальный аккаунт панели',
+        help_lines=('/web_register — получить код регистрации веб-панели',),
+    ),
     CommandSpec(
         name='admin',
         callback=admin,

@@ -10,6 +10,13 @@ from ipaddress import ip_address, ip_network
 from os import getenv
 from urllib.parse import parse_qs, urlsplit
 
+from auth import (
+    AuthenticationError,
+    IdentityProvider,
+    InvalidRegistrationCode,
+    LoginAlreadyExists,
+    UnknownTelegramUser,
+)
 from commands.game_utils import ANNOUNCEMENT_TIMEZONES, game_message, valid_url
 from services import (
     CampaignService,
@@ -23,6 +30,7 @@ from web.access import AdminAccessService, AdminIdentity
 from web.views import (
     campaigns_response,
     dashboard_response,
+    login_response,
     page_response,
     sessions_response,
     settings_response,
@@ -39,6 +47,7 @@ class AdminWebServer:
         campaigns: CampaignService,
         sessions: SessionService,
         outbox: OutboxService,
+        identities: IdentityProvider | None = None,
         internal_token: str = '',
         web_base_url: str = '',
     ) -> None:
@@ -46,6 +55,7 @@ class AdminWebServer:
         self._campaigns = campaigns
         self._sessions = sessions
         self._outbox = outbox
+        self._identities = identities
         self._internal_token = internal_token
         self._web_base_url = web_base_url
         self._server: asyncio.Server | None = None
@@ -136,6 +146,8 @@ class AdminWebServer:
             )
         if method == 'POST' and url.path == '/api/admin-link':
             return await self._admin_link(headers, parse_qs(body.decode()))
+        if method == 'POST' and url.path == '/api/auth/registration':
+            return await self._registration_api(headers, parse_qs(body.decode()))
         if method == 'POST' and url.path == '/api/game':
             return await self._game_api(headers, parse_qs(body.decode()))
         if method == 'POST' and url.path == '/api/game-url':
@@ -148,23 +160,51 @@ class AdminWebServer:
             return await self._web_url_api(headers, parse_qs(body.decode()))
         if method == 'POST' and url.path == '/api/events':
             return await self._events_api(headers, parse_qs(body.decode()))
-        if method == 'GET' and url.path == '/login':
+        if method == 'GET' and url.path == '/login' and url.query:
             token = parse_qs(url.query).get('token', [''])[0]
             session_id = await self._access.consume_login(token)
             if session_id is None:
                 return page_response(
                     HTTPStatus.UNAUTHORIZED, 'Ссылка недействительна или уже использована.'
                 )
-            cookie = f'd20_admin={session_id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800'
-            secure_mode = getenv('D20_BOT_WEB_SECURE_COOKIE', 'auto').lower()
-            forwarded_protocol = (
-                headers.get('x-forwarded-proto', 'http').split(',', 1)[0].strip().lower()
-                if self._trusted_proxy(remote_host)
-                else 'http'
-            )
-            if secure_mode == 'true' or (secure_mode == 'auto' and forwarded_protocol == 'https'):
-                cookie += '; Secure'
+            cookie = self._session_cookie(session_id, headers, remote_host)
             return HTTPStatus.SEE_OTHER, {'Location': '/campaigns', 'Set-Cookie': cookie}, b''
+        if method == 'GET' and url.path == '/login':
+            return login_response()
+        if method == 'GET' and url.path == '/register':
+            return login_response(registration=True, code=parse_qs(url.query).get('code', [''])[0])
+        if method == 'POST' and url.path == '/login':
+            if self._identities is None:
+                return page_response(HTTPStatus.SERVICE_UNAVAILABLE, 'Локальный вход отключён.')
+            form = parse_qs(body.decode())
+            user_id = await self._identities.authenticate(
+                form.get('login', [''])[0], form.get('password', [''])[0]
+            )
+            if user_id is None:
+                return login_response(error='Неверный логин или пароль.')
+            return await self._local_session(user_id, headers, remote_host)
+        if method == 'POST' and url.path == '/register':
+            if self._identities is None:
+                return page_response(HTTPStatus.SERVICE_UNAVAILABLE, 'Регистрация отключена.')
+            form = parse_qs(body.decode())
+            try:
+                user_id = await self._identities.register(
+                    form.get('code', [''])[0],
+                    form.get('login', [''])[0],
+                    form.get('password', [''])[0],
+                )
+            except InvalidRegistrationCode:
+                return login_response(
+                    error='Код недействителен или просрочен.', registration=True
+                )
+            except LoginAlreadyExists:
+                return login_response(error='Этот логин уже занят.', registration=True)
+            except AuthenticationError:
+                return login_response(
+                    error='Логин: 3–32 символа A–Z, цифры, точка, дефис или подчёркивание. Пароль — от 10 символов.',
+                    registration=True,
+                )
+            return await self._local_session(user_id, headers, remote_host)
 
         session_id = self._cookie(headers, 'd20_admin')
         identity = await self._access.authenticate(session_id)
@@ -256,6 +296,52 @@ class AdminWebServer:
         if method == 'POST' and url.path == '/session/stop':
             return await self._stop_session(selected_identity)
         return page_response(HTTPStatus.NOT_FOUND, 'Страница не найдена.')
+
+    async def _local_session(
+        self, user_id: int, headers: Mapping[str, str], remote_host: str | None
+    ) -> tuple[HTTPStatus, dict[str, str], bytes]:
+        campaigns = await self._campaigns.list_for_user(user_id)
+        initial_chat_id = campaigns[0].chat_id if campaigns else 0
+        session_id = await self._access.create_session(AdminIdentity(initial_chat_id, user_id, None))
+        return (
+            HTTPStatus.SEE_OTHER,
+            {
+                'Location': '/campaigns',
+                'Set-Cookie': self._session_cookie(session_id, headers, remote_host),
+            },
+            b'',
+        )
+
+    def _session_cookie(
+        self, session_id: str, headers: Mapping[str, str], remote_host: str | None
+    ) -> str:
+        cookie = f'd20_admin={session_id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800'
+        secure_mode = getenv('D20_BOT_WEB_SECURE_COOKIE', 'auto').lower()
+        forwarded_protocol = (
+            headers.get('x-forwarded-proto', 'http').split(',', 1)[0].strip().lower()
+            if self._trusted_proxy(remote_host)
+            else 'http'
+        )
+        if secure_mode == 'true' or (secure_mode == 'auto' and forwarded_protocol == 'https'):
+            cookie += '; Secure'
+        return cookie
+
+    async def _registration_api(
+        self, headers: Mapping[str, str], form: Mapping[str, list[str]]
+    ) -> tuple[HTTPStatus, dict[str, str], bytes]:
+        if not self._authorized(headers):
+            return self._json(HTTPStatus.UNAUTHORIZED, {'error': 'unauthorized'})
+        if self._identities is None:
+            return self._json(HTTPStatus.SERVICE_UNAVAILABLE, {'error': 'auth_disabled'})
+        try:
+            user_id = int(form['user_id'][0])
+        except KeyError, ValueError, IndexError:
+            return self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_request'})
+        try:
+            code = await self._identities.issue_registration_code(user_id)
+        except UnknownTelegramUser:
+            return self._json(HTTPStatus.NOT_FOUND, {'error': 'unknown_user'})
+        return self._json(HTTPStatus.OK, {'code': code})
 
     async def _admin_link(
         self, headers: Mapping[str, str], form: Mapping[str, list[str]]
