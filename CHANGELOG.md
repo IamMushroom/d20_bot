@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-07-16
+
 ### Added
 
 - Heartbeat liveness и Telegram API readiness для standalone Compose и Kubernetes probes.
