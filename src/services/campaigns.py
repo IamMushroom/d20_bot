@@ -42,6 +42,9 @@ class CampaignService:
         characters = await self._characters.list(campaign.id)
         return CampaignRoster(campaign, tuple(characters))
 
+    async def set_title(self, chat_id: int, title: str) -> Campaign | None:
+        return await self._campaigns.set_title(chat_id, title)
+
     async def register_player(
         self, chat_id: int, user_id: int, name: str, title: str | None = None
     ) -> PlayerRegistration:

@@ -49,3 +49,9 @@ class CampaignRepository:
         )
         assert row is not None
         return _campaign(row)
+
+    async def set_title(self, chat_id: int, title: str) -> Campaign | None:
+        row = await self._database.fetch_one(
+            'UPDATE campaigns SET title = ? WHERE chat_id = ? RETURNING *', (title, chat_id)
+        )
+        return _campaign(row) if row is not None else None

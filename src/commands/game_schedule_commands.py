@@ -28,8 +28,14 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             except CoreClientError:
                 text = '⚠️ Core недоступен или отклонил запрос.'
         else:
-            session = await session_service(context).get_planned(chat.id)
-            text = game_message(session) if session else '📅 Следующая игра пока не назначена.'
+            service = session_service(context)
+            session = await service.get_planned(chat.id)
+            timezone_name = await service.get_announcement_timezone(chat.id)
+            text = (
+                game_message(session, timezone_name)
+                if session
+                else '📅 Следующая игра пока не назначена.'
+            )
         await context.bot.send_message(chat_id=chat.id, text=text, reply_to_message_id=message.id)
         return
 
@@ -97,7 +103,8 @@ async def game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             chat.id, getattr(chat, 'title', None), scheduled_at, foundry_url
         )
         announcement = await context.bot.send_message(
-            chat_id=chat.id, text=game_message(result.session)
+            chat_id=chat.id,
+            text=game_message(result.session, await service.get_announcement_timezone(chat.id)),
         )
         await service.set_announcement(result.session.id, announcement.id)
         previous_message_id = result.previous_message_id

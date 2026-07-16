@@ -323,13 +323,16 @@ def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
             'POST', '/schedule', headers, b'scheduled_at=nope&foundry_url=https%3A%2F%2Fx.test'
         )
         bad_url = await server._route(
-            'POST', '/schedule', headers, b'scheduled_at=2026-07-20T19%3A00&foundry_url=nope'
+            'POST',
+            '/schedule',
+            headers,
+            b'scheduled_at=2026-07-20T19%3A00%2B00%3A00&foundry_url=nope',
         )
         scheduled = await server._route(
             'POST',
             '/schedule',
             headers,
-            b'scheduled_at=2026-07-20T19%3A00&foundry_url=https%3A%2F%2Ffoundry.test',
+            b'scheduled_at=2026-07-20T19%3A00%2B00%3A00&foundry_url=https%3A%2F%2Ffoundry.test',
         )
         updated = await server._route('GET', '/', headers, b'')
         missing = await server._route('GET', '/missing', headers, b'')
@@ -371,6 +374,46 @@ def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
     assert results[10][0] is HTTPStatus.NOT_FOUND
     assert results[11] is not None
     results[12].publish.assert_awaited_once()
+
+
+def test_web_campaign_settings(tmp_path):
+    async def scenario():
+        database, campaigns, sessions, access, bot = await setup(tmp_path)
+        server = AdminWebServer(access, campaigns, sessions, bot)
+        token = access.create_login(AdminIdentity(-100, 7, 'Campaign'))
+        login = await server._route('GET', f'/login?token={token}', {}, b'')
+        headers = {'cookie': login[1]['Set-Cookie'].split(';', 1)[0]}
+
+        shown = await server._route('GET', '/settings', headers, b'')
+        invalid = await server._route(
+            'POST',
+            '/settings',
+            headers,
+            b'title=New&foundry_url=nope&announcement_timezone=Moon%2FBase',
+        )
+        saved = await server._route(
+            'POST',
+            '/settings',
+            headers,
+            b'title=New+Campaign&foundry_url=https%3A%2F%2Fvtt.example&announcement_timezone=Asia%2FYerevan',
+        )
+        dashboard = await server._route('GET', '/', headers, b'')
+        roster = await campaigns.get_roster(-100)
+        config = (
+            await sessions.get_default_url(-100),
+            await sessions.get_announcement_timezone(-100),
+        )
+        await database.close()
+        return shown, invalid, saved, dashboard, roster, config
+
+    shown, invalid, saved, dashboard, roster, config = asyncio.run(scenario())
+    assert shown[0] is HTTPStatus.OK
+    assert b'Europe/Moscow' in shown[2]
+    assert invalid[0] is HTTPStatus.BAD_REQUEST
+    assert saved == (HTTPStatus.SEE_OTHER, {'Location': '/settings'}, b'')
+    assert roster is not None and roster.campaign.title == 'New Campaign'
+    assert config == ('https://vtt.example', 'Asia/Yerevan')
+    assert b'New Campaign' in dashboard[2]
 
 
 def test_internal_api_issues_admin_link_for_master(tmp_path):

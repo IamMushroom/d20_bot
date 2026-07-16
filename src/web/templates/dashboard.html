@@ -57,12 +57,54 @@
     </section>
 
     <section class="card card--wide">
+      <div class="card__header">
+        <h2>Прошлые игры</h2>
+        {% if history %}<span class="badge">Последние {{ history|length }}</span>{% endif %}
+      </div>
+      {% if history %}
+        <ol class="history">
+          {% for item in history %}
+            <li class="history__item">
+              <span class="history__title">Сессия №{{ item.number }}{% if item.title %} — {{ item.title }}{% endif %}</span>
+              <span class="history__dates">
+                {% if item.started_at %}Начало: {{ item.started_at|game_datetime }}{% endif %}
+                {% if item.finished_at %} · Завершена: {{ item.finished_at|game_datetime }}{% endif %}
+              </span>
+            </li>
+          {% endfor %}
+        </ol>
+      {% else %}
+        <div class="empty">Завершённых игр пока нет.</div>
+      {% endif %}
+    </section>
+
+    <section class="card card--wide">
       <div class="card__header"><h2>Изменить расписание</h2></div>
-      <form class="form-grid" method="post" action="/schedule">
-        <label>Дата и время <input required type="datetime-local" name="scheduled_at"></label>
+      <form class="form-grid" method="post" action="/schedule" data-local-schedule>
+        <label>Дата <input required type="text" inputmode="numeric" name="local_date" placeholder="20.07.2026" pattern="\d{2}\.\d{2}\.\d{4}"></label>
+        <label>Время <input required type="text" inputmode="numeric" name="local_time" placeholder="19:30" pattern="(?:[01]\d|2[0-3]):[0-5]\d"></label>
+        <input type="hidden" name="scheduled_at">
         <label>Foundry URL <input required type="url" name="foundry_url" value="{{ default_url }}" placeholder="https://foundry.example"></label>
         <button type="submit">Сохранить и опубликовать</button>
       </form>
+      <p class="muted" data-browser-timezone></p>
     </section>
   </div>
+  <script>
+    (() => {
+      const form = document.querySelector('[data-local-schedule]');
+      const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      document.querySelector('[data-browser-timezone]').textContent = `Время вводится в часовом поясе браузера: ${zone}`;
+      form.addEventListener('submit', event => {
+        const [day, month, year] = form.elements.local_date.value.split('.').map(Number);
+        const [hour, minute] = form.elements.local_time.value.split(':').map(Number);
+        const local = new Date(year, month - 1, day, hour, minute);
+        if (Number.isNaN(local.getTime())) {
+          event.preventDefault();
+          return;
+        }
+        form.elements.scheduled_at.value = local.toISOString();
+      });
+    })();
+  </script>
 {% endblock %}

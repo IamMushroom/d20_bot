@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Настройки — D20 Control{% endblock %}
+
+{% block content %}
+  <header class="hero">
+    <p class="eyebrow">Панель мастера</p>
+    <h1>Настройки</h1>
+    <p class="muted">Общие параметры кампании, расписания и интерфейса.</p>
+  </header>
+
+  <div class="grid">
+    <section class="card card--wide">
+      <div class="card__header"><h2>Кампания</h2></div>
+      <form method="post" action="/settings">
+        <label>Название кампании
+          <input required name="title" maxlength="100" value="{{ title }}">
+        </label>
+        <label>Стандартный адрес Foundry
+          <input required type="url" name="foundry_url" value="{{ default_url }}" placeholder="https://foundry.example">
+        </label>
+        <label>Часовой пояс в закреплённом расписании
+          <select name="announcement_timezone">
+            {% for timezone in timezones %}
+              <option value="{{ timezone }}"{% if timezone == announcement_timezone %} selected{% endif %}>{{ timezone }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button type="submit">Сохранить настройки</button>
+      </form>
+    </section>
+
+    <section class="card card--wide">
+      <div class="card__header"><h2>Оформление</h2></div>
+      <p class="muted">Тема выбирается переключателем в шапке и сохраняется только в этом браузере.</p>
+      <div class="theme-switcher" aria-label="Тема оформления">
+        <button type="button" data-theme-choice="auto">Системная</button>
+        <button type="button" data-theme-choice="light">Светлая</button>
+        <button type="button" data-theme-choice="dark">Тёмная</button>
+      </div>
+    </section>
+  </div>
+{% endblock %}

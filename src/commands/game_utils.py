@@ -6,9 +6,23 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from database.models import Session
 
+ANNOUNCEMENT_TIMEZONES = (
+    'Europe/Moscow',
+    'Europe/Kaliningrad',
+    'Europe/Berlin',
+    'Europe/London',
+    'Asia/Yerevan',
+    'Asia/Tbilisi',
+    'Asia/Almaty',
+    'Asia/Tokyo',
+    'America/New_York',
+    'America/Los_Angeles',
+    'UTC',
+)
 
-def game_timezone() -> tzinfo:
-    name = getenv('D20_BOT_GAME_TIMEZONE', 'Europe/Moscow')
+
+def game_timezone(name: str | None = None) -> tzinfo:
+    name = name or getenv('D20_BOT_GAME_TIMEZONE', 'Europe/Moscow')
     if name == 'UTC':
         return UTC
     try:
@@ -40,11 +54,11 @@ def valid_url(value: str) -> bool:
     return parsed.scheme in {'http', 'https'} and bool(parsed.netloc)
 
 
-def game_message(session: Session) -> str:
+def game_message(session: Session, timezone_name: str | None = None) -> str:
     assert session.scheduled_at is not None
     assert session.foundry_url is not None
-    local = session.scheduled_at.astimezone(game_timezone())
-    timezone_name = getenv('D20_BOT_GAME_TIMEZONE', 'Europe/Moscow')
+    timezone_name = timezone_name or getenv('D20_BOT_GAME_TIMEZONE', 'Europe/Moscow')
+    local = session.scheduled_at.astimezone(game_timezone(timezone_name))
     return (
         f'🎲 Следующая игра: {local:%d.%m.%Y в %H:%M} ({timezone_name})\n'
         f'🏰 Foundry: {session.foundry_url}'

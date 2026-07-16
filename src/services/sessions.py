@@ -59,6 +59,10 @@ class SessionService:
         campaign = await self._campaigns.get_by_chat_id(chat_id)
         return await self._sessions.get_active(campaign.id) if campaign is not None else None
 
+    async def get_history(self, chat_id: int, limit: int = 10) -> list[Session]:
+        campaign = await self._campaigns.get_by_chat_id(chat_id)
+        return await self._sessions.list_finished(campaign.id, limit) if campaign else []
+
     async def schedule(
         self,
         chat_id: int,
@@ -88,6 +92,14 @@ class SessionService:
 
     async def set_web_base_url(self, chat_id: int, web_base_url: str, updated_at: datetime) -> None:
         await self._configs.set_web_base_url(chat_id, web_base_url, updated_at)
+
+    async def get_announcement_timezone(self, chat_id: int) -> str:
+        return await self._configs.get_announcement_timezone(chat_id) or 'Europe/Moscow'
+
+    async def set_announcement_timezone(
+        self, chat_id: int, timezone_name: str, updated_at: datetime
+    ) -> None:
+        await self._configs.set_announcement_timezone(chat_id, timezone_name, updated_at)
 
     async def start(self, chat_id: int, user_id: int, title: str | None) -> SessionStart:
         campaign = await self._campaigns.get_by_chat_id(chat_id)

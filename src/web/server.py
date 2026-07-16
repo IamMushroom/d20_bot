@@ -8,7 +8,7 @@ from http import HTTPStatus
 from os import getenv
 from urllib.parse import parse_qs, urlsplit
 
-from commands.game_utils import game_message, game_timezone, valid_url
+from commands.game_utils import ANNOUNCEMENT_TIMEZONES, game_message, valid_url
 from services import (
     CampaignService,
     OutboxService,
@@ -18,7 +18,7 @@ from services import (
     SessionStopStatus,
 )
 from web.access import AdminAccessService, AdminIdentity
-from web.views import dashboard_response, page_response
+from web.views import dashboard_response, page_response, settings_response
 
 MAX_REQUEST_SIZE = 16 * 1024
 
@@ -71,7 +71,7 @@ class AdminWebServer:
             'Content-Length': str(len(content)),
             'Connection': 'close',
             'X-Content-Type-Options': 'nosniff',
-            'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'",
+            'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action 'self'",
             **response_headers,
         }
         head = f'HTTP/1.1 {status.value} {status.phrase}\r\n' + ''.join(
@@ -140,6 +140,10 @@ class AdminWebServer:
             return page_response(HTTPStatus.UNAUTHORIZED, 'Запросите новую ссылку командой /admin.')
         if method == 'GET' and url.path == '/':
             return await self._dashboard(identity)
+        if method == 'GET' and url.path == '/settings':
+            return await self._settings(identity)
+        if method == 'POST' and url.path == '/settings':
+            return await self._save_settings(identity, parse_qs(body.decode()))
         if method == 'POST' and url.path == '/schedule':
             return await self._schedule(identity, parse_qs(body.decode()))
         if method == 'POST' and url.path == '/session/start':
@@ -179,8 +183,13 @@ class AdminWebServer:
         try:
             if action == 'get':
                 session = await self._sessions.get_planned(int(form['chat_id'][0]))
+                timezone_name = await self._sessions.get_announcement_timezone(
+                    int(form['chat_id'][0])
+                )
                 message = (
-                    game_message(session) if session else '📅 Следующая игра пока не назначена.'
+                    game_message(session, timezone_name)
+                    if session
+                    else '📅 Следующая игра пока не назначена.'
                 )
                 return self._json(HTTPStatus.OK, {'message': message})
             if action == 'schedule':
@@ -201,7 +210,10 @@ class AdminWebServer:
                     HTTPStatus.OK,
                     {
                         'session_id': result.session.id,
-                        'message': game_message(result.session),
+                        'message': game_message(
+                            result.session,
+                            await self._sessions.get_announcement_timezone(chat_id),
+                        ),
                         'previous_message_id': result.previous_message_id,
                     },
                 )
@@ -365,18 +377,24 @@ class AdminWebServer:
     async def _dashboard(self, identity: AdminIdentity) -> tuple[HTTPStatus, dict[str, str], bytes]:
         session = await self._sessions.get_planned(identity.chat_id)
         active = await self._sessions.get_active(identity.chat_id)
+        history = await self._sessions.get_history(identity.chat_id)
         roster = await self._campaigns.get_roster(identity.chat_id)
         default_url = await self._sessions.get_default_url(identity.chat_id) or getenv(
             'D20_BOT_FOUNDRY_URL', ''
         )
-        return dashboard_response(identity, session, active, roster, default_url)
+        timezone_name = await self._sessions.get_announcement_timezone(identity.chat_id)
+        return dashboard_response(
+            identity, session, active, roster, default_url, history, timezone_name
+        )
 
     async def _schedule(
         self, identity: AdminIdentity, form: Mapping[str, list[str]]
     ) -> tuple[HTTPStatus, dict[str, str], bytes]:
         try:
             local = datetime.fromisoformat(form['scheduled_at'][0])
-            scheduled_at = local.replace(tzinfo=game_timezone()).astimezone(UTC)
+            if local.tzinfo is None:
+                raise ValueError
+            scheduled_at = local.astimezone(UTC)
             foundry_url = form['foundry_url'][0]
         except KeyError, ValueError, IndexError:
             return page_response(HTTPStatus.BAD_REQUEST, 'Неверные дата или URL.')
@@ -390,11 +408,47 @@ class AdminWebServer:
             {
                 'chat_id': identity.chat_id,
                 'session_id': result.session.id,
-                'message': game_message(result.session),
+                'message': game_message(
+                    result.session,
+                    await self._sessions.get_announcement_timezone(identity.chat_id),
+                ),
                 'previous_message_id': result.previous_message_id,
             },
         )
         return HTTPStatus.SEE_OTHER, {'Location': '/'}, b''
+
+    async def _settings(self, identity: AdminIdentity) -> tuple[HTTPStatus, dict[str, str], bytes]:
+        roster = await self._campaigns.get_roster(identity.chat_id)
+        title = (
+            roster.campaign.title if roster and roster.campaign.title else identity.chat_title or ''
+        )
+        default_url = await self._sessions.get_default_url(identity.chat_id) or getenv(
+            'D20_BOT_FOUNDRY_URL', ''
+        )
+        timezone_name = await self._sessions.get_announcement_timezone(identity.chat_id)
+        return settings_response(title, default_url, timezone_name)
+
+    async def _save_settings(
+        self, identity: AdminIdentity, form: Mapping[str, list[str]]
+    ) -> tuple[HTTPStatus, dict[str, str], bytes]:
+        try:
+            title = form['title'][0].strip()
+            foundry_url = form['foundry_url'][0].strip()
+            timezone_name = form['announcement_timezone'][0]
+        except KeyError, IndexError, ValueError:
+            return page_response(HTTPStatus.BAD_REQUEST, 'Некорректные настройки кампании.')
+        if (
+            not title
+            or len(title) > 100
+            or not valid_url(foundry_url)
+            or timezone_name not in ANNOUNCEMENT_TIMEZONES
+        ):
+            return page_response(HTTPStatus.BAD_REQUEST, 'Проверьте название и Foundry URL.')
+        now = datetime.now(UTC)
+        await self._campaigns.set_title(identity.chat_id, title)
+        await self._sessions.set_default_url(identity.chat_id, foundry_url, now)
+        await self._sessions.set_announcement_timezone(identity.chat_id, timezone_name, now)
+        return HTTPStatus.SEE_OTHER, {'Location': '/settings'}, b''
 
     async def _start_session(
         self, identity: AdminIdentity, form: Mapping[str, list[str]]

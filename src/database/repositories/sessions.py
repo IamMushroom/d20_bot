@@ -93,6 +93,15 @@ class SessionRepository:
         )
         return [_session(row) for row in rows]
 
+    async def list_finished(self, campaign_id: int, limit: int = 10) -> list[Session]:
+        rows = await self._database.fetch_all(
+            """SELECT * FROM sessions
+            WHERE campaign_id = ? AND finished_at IS NOT NULL
+            ORDER BY finished_at DESC LIMIT ?""",
+            (campaign_id, limit),
+        )
+        return [_session(row) for row in rows]
+
     async def get_planned(self, campaign_id: int) -> Session | None:
         row = await self._database.fetch_one(
             """SELECT * FROM sessions
