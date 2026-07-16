@@ -81,6 +81,7 @@ def test_dashboard_response_renders_theme_controls_and_history():
     assert b'data-theme-choice="auto"' in response[2]
     assert b'data-theme-choice="light"' in response[2]
     assert b'data-theme-choice="dark"' in response[2]
+    assert b'src="/static/app.js"' in response[2]
     assert 'Прошлые игры'.encode() in response[2]
     assert b'&lt;Finale&gt;' in response[2]
     assert b'16.07.2026 03:00' in response[2]

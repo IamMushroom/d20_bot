@@ -306,6 +306,7 @@ def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
         token = access.create_login(identity)
 
         health = await server._route('GET', '/health', {}, b'')
+        javascript = await server._route('GET', '/static/app.js', {}, b'')
         unauthorized = await server._route('GET', '/', {}, b'')
         login = await server._route('GET', f'/login?token={token}', {}, b'')
         secure_token = access.create_login(identity)
@@ -340,6 +341,7 @@ def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
         await database.close()
         return (
             health,
+            javascript,
             unauthorized,
             login,
             secure_login,
@@ -360,20 +362,23 @@ def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
         {'Content-Type': 'application/json; charset=utf-8'},
         b'{"status": "ok"}',
     )
-    assert results[1][0] is HTTPStatus.UNAUTHORIZED
-    assert results[2][0] is HTTPStatus.SEE_OTHER
-    assert 'Secure' not in results[2][1]['Set-Cookie']
-    assert 'Secure' in results[3][1]['Set-Cookie']
-    assert results[4][0] is HTTPStatus.UNAUTHORIZED
-    assert results[5][0] is HTTPStatus.OK
-    assert b'&lt;Tilly&gt;' in results[5][2]
-    assert results[6][0] is HTTPStatus.BAD_REQUEST
+    assert results[1][0] is HTTPStatus.OK
+    assert results[1][1]['Content-Type'] == 'text/javascript; charset=utf-8'
+    assert b'applyTheme' in results[1][2]
+    assert results[2][0] is HTTPStatus.UNAUTHORIZED
+    assert results[3][0] is HTTPStatus.SEE_OTHER
+    assert 'Secure' not in results[3][1]['Set-Cookie']
+    assert 'Secure' in results[4][1]['Set-Cookie']
+    assert results[5][0] is HTTPStatus.UNAUTHORIZED
+    assert results[6][0] is HTTPStatus.OK
+    assert b'&lt;Tilly&gt;' in results[6][2]
     assert results[7][0] is HTTPStatus.BAD_REQUEST
-    assert results[8][0] is HTTPStatus.SEE_OTHER
-    assert b'Foundry' in results[9][2]
-    assert results[10][0] is HTTPStatus.NOT_FOUND
-    assert results[11] is not None
-    results[12].publish.assert_awaited_once()
+    assert results[8][0] is HTTPStatus.BAD_REQUEST
+    assert results[9][0] is HTTPStatus.SEE_OTHER
+    assert b'Foundry' in results[10][2]
+    assert results[11][0] is HTTPStatus.NOT_FOUND
+    assert results[12] is not None
+    results[13].publish.assert_awaited_once()
 
 
 def test_web_campaign_settings(tmp_path):

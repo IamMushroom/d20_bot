@@ -73,6 +73,7 @@
       input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(169, 139, 255, .16); }
       button { border: 0; padding: .72rem 1rem; background: linear-gradient(135deg, var(--accent), #8060df); color: #130d22; font-weight: 800; cursor: pointer; }
       button:hover { filter: brightness(1.08); }
+      button:disabled { cursor: wait; filter: grayscale(.25); opacity: .72; }
       button:focus-visible, a:focus-visible { outline: 3px solid var(--accent-strong); outline-offset: 3px; }
       .button--danger { background: rgba(255, 133, 143, .12); color: var(--danger); border: 1px solid rgba(255, 133, 143, .3); }
       .message { max-width: 34rem; margin: clamp(2rem, 10vh, 7rem) auto; text-align: center; }
@@ -118,23 +119,6 @@
       </div>
     </header>
     <main class="page">{% block content %}{% endblock %}</main>
-    <script>
-      (() => {
-        const buttons = document.querySelectorAll('[data-theme-choice]');
-        const selected = localStorage.getItem('d20-theme') || 'auto';
-        const apply = (theme) => {
-          if (theme === 'auto') {
-            delete document.documentElement.dataset.theme;
-            localStorage.removeItem('d20-theme');
-          } else {
-            document.documentElement.dataset.theme = theme;
-            localStorage.setItem('d20-theme', theme);
-          }
-          buttons.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.themeChoice === theme)));
-        };
-        buttons.forEach(button => button.addEventListener('click', () => apply(button.dataset.themeChoice)));
-        apply(selected);
-      })();
-    </script>
+    <script src="/static/app.js" defer></script>
   </body>
 </html>

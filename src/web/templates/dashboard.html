@@ -29,7 +29,7 @@
       </div>
       {% if active %}
         <p><strong>Активная сессия №{{ active.number }}</strong>{% if active.title %}<br><span class="muted">{{ active.title }}</span>{% endif %}</p>
-        <form method="post" action="/session/stop">
+        <form method="post" action="/session/stop" data-confirm="Точно завершить текущую сессию?">
           <button class="button--danger" type="submit">⏹️ Завершить сессию</button>
         </form>
       {% else %}
@@ -90,21 +90,4 @@
       <p class="muted" data-browser-timezone></p>
     </section>
   </div>
-  <script>
-    (() => {
-      const form = document.querySelector('[data-local-schedule]');
-      const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      document.querySelector('[data-browser-timezone]').textContent = `Время вводится в часовом поясе браузера: ${zone}`;
-      form.addEventListener('submit', event => {
-        const [day, month, year] = form.elements.local_date.value.split('.').map(Number);
-        const [hour, minute] = form.elements.local_time.value.split(':').map(Number);
-        const local = new Date(year, month - 1, day, hour, minute);
-        if (Number.isNaN(local.getTime())) {
-          event.preventDefault();
-          return;
-        }
-        form.elements.scheduled_at.value = local.toISOString();
-      });
-    })();
-  </script>
 {% endblock %}

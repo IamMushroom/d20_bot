@@ -5,6 +5,7 @@ import secrets
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from http import HTTPStatus
+from importlib.resources import files
 from os import getenv
 from urllib.parse import parse_qs, urlsplit
 
@@ -21,6 +22,7 @@ from web.access import AdminAccessService, AdminIdentity
 from web.views import dashboard_response, page_response, settings_response
 
 MAX_REQUEST_SIZE = 16 * 1024
+APP_JS = files('web').joinpath('static/app.js').read_bytes()
 
 
 class AdminWebServer:
@@ -71,7 +73,7 @@ class AdminWebServer:
             'Content-Length': str(len(content)),
             'Connection': 'close',
             'X-Content-Type-Options': 'nosniff',
-            'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action 'self'",
+            'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'; form-action 'self'",
             **response_headers,
         }
         head = f'HTTP/1.1 {status.value} {status.phrase}\r\n' + ''.join(
@@ -107,6 +109,15 @@ class AdminWebServer:
         url = urlsplit(target)
         if method == 'GET' and url.path == '/health':
             return self._json(HTTPStatus.OK, {'status': 'ok'})
+        if method == 'GET' and url.path == '/static/app.js':
+            return (
+                HTTPStatus.OK,
+                {
+                    'Content-Type': 'text/javascript; charset=utf-8',
+                    'Cache-Control': 'public, max-age=3600',
+                },
+                APP_JS,
+            )
         if method == 'POST' and url.path == '/api/admin-link':
             return await self._admin_link(headers, parse_qs(body.decode()))
         if method == 'POST' and url.path == '/api/game':
