@@ -16,7 +16,7 @@ DEFAULT_HEARTBEAT_PATH = str(Path(tempfile.gettempdir()) / 'd20-bot-heartbeat')
 HEARTBEAT_INTERVAL_SECONDS = 5
 MAX_HEARTBEAT_AGE_SECONDS = 20
 TELEGRAM_API_BASE_URL = 'https://api.telegram.org'
-TELEGRAM_TIMEOUT_SECONDS = 3
+TELEGRAM_TIMEOUT_SECONDS = 1
 
 
 def heartbeat_path() -> Path:

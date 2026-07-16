@@ -60,7 +60,7 @@ services:
     healthcheck:
       test: [CMD, .venv/bin/python, src/healthcheck.py, --readiness]
       interval: 10s
-      timeout: 3s
+      timeout: 5s
       retries: 3
       start_period: 10s
     logging:
