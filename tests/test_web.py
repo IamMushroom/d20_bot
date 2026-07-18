@@ -840,6 +840,12 @@ def test_master_manages_campaign_players_from_web(tmp_path):
         login = await server._route('GET', f'/login?token={token}', {}, b'')
         headers = {'cookie': login[1]['Set-Cookie'].split(';', 1)[0]}
         dashboard = await server._route('GET', '/', headers, b'')
+        added = await server._route(
+            'POST',
+            '/player/invite',
+            headers,
+            await csrf_body(access, headers, b'chat_id=-100&user_id=9&name=Alice'),
+        )
         renamed = await server._route(
             'POST',
             '/player/rename',
@@ -858,15 +864,77 @@ def test_master_manages_campaign_players_from_web(tmp_path):
             'SELECT name FROM characters WHERE telegram_user_id = 8'
         )
         await database.close()
-        return dashboard, renamed, renamed_dashboard, removed, removed_dashboard, retained
+        return (
+            dashboard,
+            added,
+            renamed,
+            renamed_dashboard,
+            removed,
+            removed_dashboard,
+            retained,
+            bot,
+        )
 
-    dashboard, renamed, renamed_dashboard, removed, removed_dashboard, retained = asyncio.run(
-        scenario()
+    dashboard, added, renamed, renamed_dashboard, removed, removed_dashboard, retained, bot = (
+        asyncio.run(scenario())
     )
+    assert b'/player/invite' in dashboard[2]
     assert b'/player/rename' in dashboard[2] and b'/player/remove' in dashboard[2]
+    assert added[0] is HTTPStatus.SEE_OTHER and b'Alice' not in renamed_dashboard[2]
+    assert bot.publish.await_args.args == (
+        'player_invited',
+        {
+            'chat_id': -100,
+            'requester_user_id': 7,
+            'target_user_id': 9,
+            'character_name': 'Alice',
+        },
+    )
     assert renamed[0] is HTTPStatus.SEE_OTHER and b'Tilly Fang' in renamed_dashboard[2]
     assert removed[0] is HTTPStatus.SEE_OTHER and b'Tilly Fang' not in removed_dashboard[2]
     assert retained == {'name': 'Tilly Fang'}
+
+
+def test_web_player_invite_validates_input_and_membership_conflict(tmp_path):
+    async def scenario():
+        database, campaigns, sessions, access, bot = await setup(tmp_path)
+        server = AdminWebServer(access, campaigns, sessions, bot)
+        token = await access.create_login(AdminIdentity(-100, 7, 'Campaign'))
+        login = await server._route('GET', f'/login?token={token}', {}, b'')
+        headers = {'cookie': login[1]['Set-Cookie'].split(';', 1)[0]}
+        malformed = await server._route(
+            'POST',
+            '/player/invite',
+            headers,
+            await csrf_body(access, headers, b'chat_id=-100&user_id=nope&name=Alice'),
+        )
+        invalid = await server._route(
+            'POST',
+            '/player/invite',
+            headers,
+            await csrf_body(access, headers, b'chat_id=-100&user_id=0&name='),
+        )
+        self_conflict = await server._route(
+            'POST',
+            '/player/invite',
+            headers,
+            await csrf_body(access, headers, b'chat_id=-100&user_id=7&name=Master'),
+        )
+        await campaigns.register_player(-100, 8, 'Tilly')
+        member_conflict = await server._route(
+            'POST',
+            '/player/invite',
+            headers,
+            await csrf_body(access, headers, b'chat_id=-100&user_id=8&name=Tilly'),
+        )
+        await database.close()
+        return malformed, invalid, self_conflict, member_conflict
+
+    malformed, invalid, self_conflict, member_conflict = asyncio.run(scenario())
+    assert malformed[0] is HTTPStatus.BAD_REQUEST
+    assert invalid[0] is HTTPStatus.BAD_REQUEST
+    assert self_conflict[0] is HTTPStatus.CONFLICT
+    assert member_conflict[0] is HTTPStatus.CONFLICT
 
 
 def test_internal_api_issues_admin_link_for_master(tmp_path):

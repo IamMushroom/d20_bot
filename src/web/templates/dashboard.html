@@ -50,6 +50,16 @@
       {% if roster %}
         {% set masters = roster.memberships|selectattr('role', 'equalto', 'master')|list %}
         <p class="muted">Мастера: {% if masters %}{% for member in masters %}Telegram ID {{ member.telegram_user_id }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}не назначены{% endif %}</p>
+        {% if role == 'master' %}
+          <form class="player-add" method="post" action="/player/invite">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="chat_id" value="{{ campaign_chat_id }}">
+            <label>Telegram ID <input type="number" name="user_id" required min="1" inputmode="numeric" placeholder="123456789"></label>
+            <label>Имя персонажа <input name="name" required maxlength="64" placeholder="Например, Тилли"></label>
+            <button type="submit">Создать приглашение</button>
+          </form>
+          <p class="muted">Бот отправит одноразовую ссылку игроку или вам, если ещё не может написать ему лично.</p>
+        {% endif %}
         <ul class="roster{% if role == 'master' %} roster--managed{% endif %}">
           {% for character in roster.characters %}
             <li>

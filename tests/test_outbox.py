@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from telegram.error import Forbidden
 
 import core.events as event_module
 from core import CoreClient, CoreClientError, CoreEvent
@@ -71,6 +72,69 @@ def test_processes_all_outbox_event_types():
     bot.pin_chat_message.assert_awaited_once()
     assert bot.unpin_chat_message.await_count == 2
     assert client.acknowledge_event.await_count == 3
+
+
+def test_player_invite_event_creates_single_use_link_and_messages_target():
+    async def scenario():
+        bot = SimpleNamespace(
+            create_chat_invite_link=AsyncMock(
+                return_value=SimpleNamespace(invite_link='https://t.me/+invite')
+            ),
+            send_message=AsyncMock(),
+        )
+        client = SimpleNamespace(acknowledge_event=AsyncMock())
+        event = CoreEvent(
+            4,
+            'player_invited',
+            {
+                'chat_id': -100,
+                'requester_user_id': 7,
+                'target_user_id': 9,
+                'character_name': 'Alice',
+            },
+        )
+        await process_event(bot, client, event)
+        return bot, client
+
+    bot, client = asyncio.run(scenario())
+    assert bot.create_chat_invite_link.await_args.kwargs['member_limit'] == 1
+    assert bot.create_chat_invite_link.await_args.kwargs['chat_id'] == -100
+    assert bot.send_message.await_args.kwargs['chat_id'] == 9
+    assert 'https://t.me/+invite' in bot.send_message.await_args.kwargs['text']
+    assert '/player Alice' in bot.send_message.await_args.kwargs['text']
+    client.acknowledge_event.assert_awaited_once_with(4)
+
+
+def test_player_invite_falls_back_to_requester_when_target_cannot_be_messaged():
+    async def scenario():
+        bot = SimpleNamespace(
+            create_chat_invite_link=AsyncMock(
+                return_value=SimpleNamespace(invite_link='https://t.me/+invite')
+            ),
+            send_message=AsyncMock(side_effect=[Forbidden('blocked'), None]),
+        )
+        client = SimpleNamespace(acknowledge_event=AsyncMock())
+        await process_event(
+            bot,
+            client,
+            CoreEvent(
+                5,
+                'player_invited',
+                {
+                    'chat_id': -100,
+                    'requester_user_id': 7,
+                    'target_user_id': 9,
+                    'character_name': 'Alice',
+                },
+            ),
+        )
+        return bot, client
+
+    bot, client = asyncio.run(scenario())
+    assert bot.send_message.await_count == 2
+    assert bot.send_message.await_args.kwargs['chat_id'] == 7
+    assert 'Перешлите' in bot.send_message.await_args.kwargs['text']
+    client.acknowledge_event.assert_awaited_once_with(5)
 
 
 def test_rejects_invalid_or_unknown_outbox_event():

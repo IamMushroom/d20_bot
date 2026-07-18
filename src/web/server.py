@@ -242,6 +242,7 @@ class AdminWebServer:
             '/schedule',
             '/session/start',
             '/session/stop',
+            '/player/invite',
             '/player/rename',
             '/player/remove',
         }:
@@ -315,6 +316,8 @@ class AdminWebServer:
             return await self._start_session(selected_identity, form)
         if method == 'POST' and url.path == '/session/stop':
             return await self._stop_session(selected_identity)
+        if method == 'POST' and url.path == '/player/invite':
+            return await self._invite_player(selected_identity, form)
         if method == 'POST' and url.path == '/player/rename':
             return await self._rename_player(selected_identity, form)
         if method == 'POST' and url.path == '/player/remove':
@@ -788,6 +791,37 @@ class AdminWebServer:
             )
         if await self._campaigns.rename_player(identity.chat_id, user_id, name) is None:
             return page_response(HTTPStatus.NOT_FOUND, 'Игрок не найден в этой кампании.')
+        return HTTPStatus.SEE_OTHER, {'Location': f'/?campaign={identity.chat_id}'}, b''
+
+    async def _invite_player(
+        self, identity: AdminIdentity, form: Mapping[str, list[str]]
+    ) -> tuple[HTTPStatus, dict[str, str], bytes]:
+        try:
+            user_id = int(form['user_id'][0])
+            name = form['name'][0].strip()
+        except KeyError, ValueError, IndexError:
+            return page_response(HTTPStatus.BAD_REQUEST, 'Некорректные данные игрока.')
+        if user_id <= 0 or not name or len(name) > 64:
+            return page_response(
+                HTTPStatus.BAD_REQUEST,
+                'Укажите положительный Telegram ID и имя от 1 до 64 символов.',
+            )
+        if user_id == identity.user_id:
+            return page_response(
+                HTTPStatus.CONFLICT,
+                'Нельзя пригласить самого себя как игрока.',
+            )
+        if await self._campaigns.get_role(identity.chat_id, user_id) is not None:
+            return page_response(HTTPStatus.CONFLICT, 'Пользователь уже состоит в кампании.')
+        await self._outbox.publish(
+            'player_invited',
+            {
+                'chat_id': identity.chat_id,
+                'requester_user_id': identity.user_id,
+                'target_user_id': user_id,
+                'character_name': name,
+            },
+        )
         return HTTPStatus.SEE_OTHER, {'Location': f'/?campaign={identity.chat_id}'}, b''
 
     async def _remove_player(
