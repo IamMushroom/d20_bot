@@ -937,6 +937,40 @@ def test_web_player_invite_validates_input_and_membership_conflict(tmp_path):
     assert member_conflict[0] is HTTPStatus.CONFLICT
 
 
+def test_web_player_management_reports_invalid_and_missing_players(tmp_path):
+    async def scenario():
+        database, campaigns, sessions, access, bot = await setup(tmp_path)
+        await campaigns.register_player(-100, 8, 'Tilly')
+        server = AdminWebServer(access, campaigns, sessions, bot)
+        token = await access.create_login(AdminIdentity(-100, 7, 'Campaign'))
+        login = await server._route('GET', f'/login?token={token}', {}, b'')
+        headers = {'cookie': login[1]['Set-Cookie'].split(';', 1)[0]}
+
+        async def post(path, body):
+            return await server._route(
+                'POST', path, headers, await csrf_body(access, headers, body)
+            )
+
+        responses = [
+            await post('/player/rename', b'chat_id=-100&user_id=nope&name=Alice'),
+            await post('/player/rename', b'chat_id=-100&user_id=8&name='),
+            await post('/player/rename', b'chat_id=-100&user_id=9&name=Missing'),
+            await post('/player/remove', b'chat_id=-100&user_id=nope'),
+            await post('/player/remove', b'chat_id=-100&user_id=9'),
+        ]
+        await database.close()
+        return responses
+
+    responses = asyncio.run(scenario())
+    assert [response[0] for response in responses] == [
+        HTTPStatus.BAD_REQUEST,
+        HTTPStatus.BAD_REQUEST,
+        HTTPStatus.NOT_FOUND,
+        HTTPStatus.BAD_REQUEST,
+        HTTPStatus.NOT_FOUND,
+    ]
+
+
 def test_internal_api_issues_admin_link_for_master(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)

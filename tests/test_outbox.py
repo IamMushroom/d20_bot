@@ -147,6 +147,20 @@ def test_rejects_invalid_or_unknown_outbox_event():
     client.acknowledge_event.assert_not_awaited()
 
 
+def test_rejects_player_invite_without_character_name():
+    bot = SimpleNamespace(create_chat_invite_link=AsyncMock(), send_message=AsyncMock())
+    client = SimpleNamespace(acknowledge_event=AsyncMock())
+    event = CoreEvent(
+        3,
+        'player_invited',
+        {'chat_id': -100, 'requester_user_id': 7, 'target_user_id': 9},
+    )
+    with pytest.raises(ValueError, match='character_name'):
+        asyncio.run(process_event(bot, client, event))
+    bot.create_chat_invite_link.assert_not_awaited()
+    client.acknowledge_event.assert_not_awaited()
+
+
 def test_core_client_reads_and_acknowledges_events(monkeypatch):
     request = AsyncMock(
         side_effect=[
