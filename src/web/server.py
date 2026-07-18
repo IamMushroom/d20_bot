@@ -3,7 +3,7 @@ import json
 import logging
 import secrets
 from collections.abc import Mapping
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 from importlib.resources import files
 from ipaddress import ip_address, ip_network
@@ -15,6 +15,7 @@ from auth import (
     IdentityProvider,
     InvalidRegistrationCode,
     LoginAlreadyExists,
+    RateLimiter,
     UnknownTelegramUser,
 )
 from commands.game_utils import ANNOUNCEMENT_TIMEZONES, game_message, valid_url
@@ -49,6 +50,7 @@ class AdminWebServer:
         sessions: SessionService,
         outbox: OutboxService,
         identities: IdentityProvider | None = None,
+        rate_limiter: RateLimiter | None = None,
         internal_token: str = '',
         web_base_url: str = '',
     ) -> None:
@@ -57,6 +59,7 @@ class AdminWebServer:
         self._sessions = sessions
         self._outbox = outbox
         self._identities = identities
+        self._rate_limiter = rate_limiter
         self._internal_token = internal_token
         self._web_base_url = web_base_url
         self._server: asyncio.Server | None = None
@@ -177,6 +180,13 @@ class AdminWebServer:
         if method == 'POST' and url.path == '/login':
             if self._identities is None:
                 return page_response(HTTPStatus.SERVICE_UNAVAILABLE, 'Локальный вход отключён.')
+            limited = await self._rate_limit(
+                f'login:{self._client_ip(headers, remote_host)}',
+                limit=10,
+                window=timedelta(minutes=10),
+            )
+            if limited is not None:
+                return limited
             form = parse_qs(body.decode())
             user_id = await self._identities.authenticate(
                 form.get('login', [''])[0], form.get('password', [''])[0]
@@ -187,6 +197,13 @@ class AdminWebServer:
         if method == 'POST' and url.path == '/register':
             if self._identities is None:
                 return page_response(HTTPStatus.SERVICE_UNAVAILABLE, 'Регистрация отключена.')
+            limited = await self._rate_limit(
+                f'register:{self._client_ip(headers, remote_host)}',
+                limit=10,
+                window=timedelta(minutes=10),
+            )
+            if limited is not None:
+                return limited
             form = parse_qs(body.decode())
             try:
                 user_id = await self._identities.register(
@@ -225,6 +242,8 @@ class AdminWebServer:
             '/schedule',
             '/session/start',
             '/session/stop',
+            '/player/rename',
+            '/player/remove',
         }:
             try:
                 chat_id = int(form.get('chat_id', [str(identity.chat_id)])[0])
@@ -296,6 +315,10 @@ class AdminWebServer:
             return await self._start_session(selected_identity, form)
         if method == 'POST' and url.path == '/session/stop':
             return await self._stop_session(selected_identity)
+        if method == 'POST' and url.path == '/player/rename':
+            return await self._rename_player(selected_identity, form)
+        if method == 'POST' and url.path == '/player/remove':
+            return await self._remove_player(selected_identity, form)
         return page_response(HTTPStatus.NOT_FOUND, 'Страница не найдена.')
 
     async def _local_session(
@@ -340,6 +363,11 @@ class AdminWebServer:
             user_id = int(form['user_id'][0])
         except KeyError, ValueError, IndexError:
             return self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_request'})
+        limited = await self._rate_limit(
+            f'registration-code:{user_id}', limit=5, window=timedelta(minutes=15), json=True
+        )
+        if limited is not None:
+            return limited
         try:
             code = await self._identities.issue_registration_code(user_id)
         except UnknownTelegramUser:
@@ -359,6 +387,11 @@ class AdminWebServer:
             return self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_request'})
         if not await self._campaigns.is_master(chat_id, user_id):
             return self._json(HTTPStatus.FORBIDDEN, {'error': 'forbidden'})
+        limited = await self._rate_limit(
+            f'admin-link:{user_id}', limit=5, window=timedelta(minutes=10), json=True
+        )
+        if limited is not None:
+            return limited
         base_url = await self._sessions.get_web_base_url(chat_id) or self._web_base_url
         if not base_url:
             return self._json(HTTPStatus.CONFLICT, {'error': 'web_url_not_configured'})
@@ -568,6 +601,41 @@ class AdminWebServer:
             supplied_token, self._internal_token
         )
 
+    def _client_ip(self, headers: Mapping[str, str], remote_host: str | None) -> str:
+        candidate = remote_host or 'unknown'
+        if self._trusted_proxy(remote_host):
+            candidate = headers.get('x-forwarded-for', '').split(',', 1)[0].strip() or candidate
+        try:
+            return str(ip_address(candidate))
+        except ValueError:
+            return remote_host or 'unknown'
+
+    async def _rate_limit(
+        self,
+        key: str,
+        *,
+        limit: int,
+        window: timedelta,
+        json: bool = False,
+    ) -> tuple[HTTPStatus, dict[str, str], bytes] | None:
+        if self._rate_limiter is None:
+            return None
+        result = await self._rate_limiter.hit(key, limit=limit, window=window)
+        if result.allowed:
+            return None
+        retry_header = {'Retry-After': str(result.retry_after)}
+        if json:
+            status, headers, body = self._json(
+                HTTPStatus.TOO_MANY_REQUESTS,
+                {'error': 'rate_limited', 'retry_after': result.retry_after},
+            )
+            return status, {**headers, **retry_header}, body
+        status, headers, body = page_response(
+            HTTPStatus.TOO_MANY_REQUESTS,
+            'Слишком много попыток. Повторите запрос позже.',
+        )
+        return status, {**headers, **retry_header}, body
+
     async def _dashboard(
         self, identity: AdminIdentity, session_id: str, role: str = 'master'
     ) -> tuple[HTTPStatus, dict[str, str], bytes]:
@@ -704,6 +772,33 @@ class AdminWebServer:
             'session_stopped',
             {'chat_id': identity.chat_id, 'number': session.number},
         )
+        return HTTPStatus.SEE_OTHER, {'Location': f'/?campaign={identity.chat_id}'}, b''
+
+    async def _rename_player(
+        self, identity: AdminIdentity, form: Mapping[str, list[str]]
+    ) -> tuple[HTTPStatus, dict[str, str], bytes]:
+        try:
+            user_id = int(form['user_id'][0])
+            name = form['name'][0].strip()
+        except KeyError, ValueError, IndexError:
+            return page_response(HTTPStatus.BAD_REQUEST, 'Некорректные данные игрока.')
+        if not name or len(name) > 64:
+            return page_response(
+                HTTPStatus.BAD_REQUEST, 'Имя должно содержать от 1 до 64 символов.'
+            )
+        if await self._campaigns.rename_player(identity.chat_id, user_id, name) is None:
+            return page_response(HTTPStatus.NOT_FOUND, 'Игрок не найден в этой кампании.')
+        return HTTPStatus.SEE_OTHER, {'Location': f'/?campaign={identity.chat_id}'}, b''
+
+    async def _remove_player(
+        self, identity: AdminIdentity, form: Mapping[str, list[str]]
+    ) -> tuple[HTTPStatus, dict[str, str], bytes]:
+        try:
+            user_id = int(form['user_id'][0])
+        except KeyError, ValueError, IndexError:
+            return page_response(HTTPStatus.BAD_REQUEST, 'Некорректные данные игрока.')
+        if not await self._campaigns.remove_player(identity.chat_id, user_id):
+            return page_response(HTTPStatus.NOT_FOUND, 'Игрок не найден в этой кампании.')
         return HTTPStatus.SEE_OTHER, {'Location': f'/?campaign={identity.chat_id}'}, b''
 
     @staticmethod

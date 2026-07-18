@@ -67,3 +67,17 @@ class CampaignService:
         await self._memberships.set_role(campaign.id, user_id, 'player')
         character = await self._characters.register(campaign.id, user_id, name)
         return PlayerRegistration(PlayerRegistrationStatus.REGISTERED, character)
+
+    async def rename_player(self, chat_id: int, user_id: int, name: str) -> Character | None:
+        campaign = await self._campaigns.get_by_chat_id(chat_id)
+        if campaign is None or await self._memberships.get_role(campaign.id, user_id) != 'player':
+            return None
+        return await self._characters.rename(campaign.id, user_id, name)
+
+    async def remove_player(self, chat_id: int, user_id: int) -> bool:
+        campaign = await self._campaigns.get_by_chat_id(chat_id)
+        return (
+            await self._memberships.remove_player(campaign.id, user_id)
+            if campaign is not None
+            else False
+        )

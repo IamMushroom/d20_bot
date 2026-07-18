@@ -50,9 +50,30 @@
       {% if roster %}
         {% set masters = roster.memberships|selectattr('role', 'equalto', 'master')|list %}
         <p class="muted">Мастера: {% if masters %}{% for member in masters %}Telegram ID {{ member.telegram_user_id }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}не назначены{% endif %}</p>
-        <ul class="roster">
+        <ul class="roster{% if role == 'master' %} roster--managed{% endif %}">
           {% for character in roster.characters %}
-            <li>{{ character.name }}</li>
+            <li>
+              {% if role == 'master' %}
+                <form class="player-editor" method="post" action="/player/rename">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <input type="hidden" name="chat_id" value="{{ campaign_chat_id }}">
+                  <input type="hidden" name="user_id" value="{{ character.telegram_user_id }}">
+                  <label>
+                    <span class="sr-only">Имя персонажа</span>
+                    <input name="name" value="{{ character.name }}" required maxlength="64">
+                  </label>
+                  <button type="submit">Сохранить</button>
+                </form>
+                <form class="player-remove" method="post" action="/player/remove" data-confirm="Удалить {{ character.name }} из этой кампании? История игр сохранится.">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <input type="hidden" name="chat_id" value="{{ campaign_chat_id }}">
+                  <input type="hidden" name="user_id" value="{{ character.telegram_user_id }}">
+                  <button class="button--danger" type="submit" aria-label="Удалить {{ character.name }}">Удалить</button>
+                </form>
+              {% else %}
+                {{ character.name }}
+              {% endif %}
+            </li>
           {% else %}
             <li>Игроки не зарегистрированы</li>
           {% endfor %}

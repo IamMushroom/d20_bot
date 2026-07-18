@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 from telegram.error import BadRequest
 
-from auth import SQLiteLocalIdentityProvider
+from auth import RateLimitResult, SQLiteLocalIdentityProvider
 from commands.admin_commands import (
     ADMIN_ACCESS_KEY,
     CORE_CLIENT_KEY,
@@ -224,6 +224,69 @@ def test_local_web_auth_errors_and_registration_api(tmp_path):
         HTTPStatus.SERVICE_UNAVAILABLE,
         HTTPStatus.SERVICE_UNAVAILABLE,
     ]
+
+
+def test_auth_endpoints_return_rate_limit_response(tmp_path):
+    async def scenario():
+        database, campaigns, sessions, access, bot = await setup(tmp_path)
+        identities = SQLiteLocalIdentityProvider(database)
+        limiter = SimpleNamespace(hit=AsyncMock(return_value=RateLimitResult(False, 42)))
+        server = AdminWebServer(
+            access,
+            campaigns,
+            sessions,
+            bot,
+            identities,
+            limiter,
+            internal_token='secret',
+            web_base_url='https://d20.example',
+        )
+        headers = {'authorization': 'Bearer secret'}
+        responses = [
+            await server._route(
+                'POST', '/login', {}, b'login=user&password=long-password', '192.0.2.1'
+            ),
+            await server._route(
+                'POST',
+                '/register',
+                {},
+                b'code=ABCD&login=user&password=long-password',
+                '192.0.2.1',
+            ),
+            await server._route('POST', '/api/auth/registration', headers, b'user_id=7'),
+            await server._route('POST', '/api/admin-link', headers, b'chat_id=-100&user_id=7'),
+        ]
+        await database.close()
+        return responses, limiter
+
+    responses, limiter = asyncio.run(scenario())
+    assert all(response[0] is HTTPStatus.TOO_MANY_REQUESTS for response in responses)
+    assert all(response[1]['Retry-After'] == '42' for response in responses)
+    assert b'rate_limited' in responses[2][2] and b'rate_limited' in responses[3][2]
+    assert limiter.hit.await_count == 4
+
+
+def test_rate_limit_only_trusts_forwarded_ip_from_configured_proxy(tmp_path, monkeypatch):
+    async def scenario():
+        database, campaigns, sessions, access, bot = await setup(tmp_path)
+        identities = SQLiteLocalIdentityProvider(database)
+        limiter = SimpleNamespace(hit=AsyncMock(return_value=RateLimitResult(False, 1)))
+        server = AdminWebServer(access, campaigns, sessions, bot, identities, limiter)
+        headers = {'x-forwarded-for': '198.51.100.10, 127.0.0.1'}
+        await server._route('POST', '/login', headers, b'login=x&password=y', '127.0.0.1')
+        trusted_key = limiter.hit.await_args.kwargs if limiter.hit.await_args.kwargs else None
+        trusted_call = limiter.hit.await_args.args[0]
+        limiter.hit.reset_mock()
+        await server._route('POST', '/login', headers, b'login=x&password=y', '203.0.113.5')
+        untrusted_call = limiter.hit.await_args.args[0]
+        await database.close()
+        return trusted_call, trusted_key, untrusted_call
+
+    monkeypatch.setenv('D20_BOT_WEB_TRUSTED_PROXIES', '127.0.0.0/8')
+    trusted, kwargs, untrusted = asyncio.run(scenario())
+    assert trusted == 'login:198.51.100.10'
+    assert kwargs == {'limit': 10, 'window': timedelta(minutes=10)}
+    assert untrusted == 'login:203.0.113.5'
 
 
 def test_web_register_command_handles_missing_context_and_core_error():
@@ -766,6 +829,44 @@ def test_web_user_can_switch_between_campaign_roles(tmp_path):
     assert foreign[0] is HTTPStatus.FORBIDDEN
     assert invalid_query[0] is HTTPStatus.BAD_REQUEST
     assert invalid_form[0] is HTTPStatus.BAD_REQUEST
+
+
+def test_master_manages_campaign_players_from_web(tmp_path):
+    async def scenario():
+        database, campaigns, sessions, access, bot = await setup(tmp_path)
+        await campaigns.register_player(-100, 8, 'Tilly')
+        server = AdminWebServer(access, campaigns, sessions, bot)
+        token = await access.create_login(AdminIdentity(-100, 7, 'Campaign'))
+        login = await server._route('GET', f'/login?token={token}', {}, b'')
+        headers = {'cookie': login[1]['Set-Cookie'].split(';', 1)[0]}
+        dashboard = await server._route('GET', '/', headers, b'')
+        renamed = await server._route(
+            'POST',
+            '/player/rename',
+            headers,
+            await csrf_body(access, headers, b'chat_id=-100&user_id=8&name=Tilly+Fang'),
+        )
+        renamed_dashboard = await server._route('GET', '/', headers, b'')
+        removed = await server._route(
+            'POST',
+            '/player/remove',
+            headers,
+            await csrf_body(access, headers, b'chat_id=-100&user_id=8'),
+        )
+        removed_dashboard = await server._route('GET', '/', headers, b'')
+        retained = await database.fetch_one(
+            'SELECT name FROM characters WHERE telegram_user_id = 8'
+        )
+        await database.close()
+        return dashboard, renamed, renamed_dashboard, removed, removed_dashboard, retained
+
+    dashboard, renamed, renamed_dashboard, removed, removed_dashboard, retained = asyncio.run(
+        scenario()
+    )
+    assert b'/player/rename' in dashboard[2] and b'/player/remove' in dashboard[2]
+    assert renamed[0] is HTTPStatus.SEE_OTHER and b'Tilly Fang' in renamed_dashboard[2]
+    assert removed[0] is HTTPStatus.SEE_OTHER and b'Tilly Fang' not in removed_dashboard[2]
+    assert retained == {'name': 'Tilly Fang'}
 
 
 def test_internal_api_issues_admin_link_for_master(tmp_path):

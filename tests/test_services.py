@@ -81,6 +81,32 @@ def test_campaign_roles_are_scoped_to_each_campaign(tmp_path):
     assert roles == (True, False, False, True)
 
 
+def test_campaign_service_renames_and_removes_player_without_deleting_character(tmp_path):
+    async def scenario():
+        database = await open_database(tmp_path, 'campaign-player-management.sqlite3')
+        service = CampaignService(database)
+        await service.assign_master(-100, 7, 'Campaign')
+        await service.register_player(-100, 8, 'Tilly')
+        renamed = await service.rename_player(-100, 8, 'Tilly Fang')
+        removed = await service.remove_player(-100, 8)
+        roster = await service.get_roster(-100)
+        retained = await database.fetch_one(
+            'SELECT name FROM characters WHERE telegram_user_id = 8'
+        )
+        missing_rename = await service.rename_player(-100, 8, 'Hidden')
+        repeated_remove = await service.remove_player(-100, 8)
+        await database.close()
+        return renamed, removed, roster, retained, missing_rename, repeated_remove
+
+    renamed, removed, roster, retained, missing_rename, repeated_remove = asyncio.run(scenario())
+    assert renamed is not None and renamed.name == 'Tilly Fang'
+    assert removed
+    assert roster is not None and roster.characters == ()
+    assert retained == {'name': 'Tilly Fang'}
+    assert missing_rename is None
+    assert not repeated_remove
+
+
 def test_session_service_schedules_and_replaces_announcement(tmp_path):
     async def scenario():
         database = await open_database(tmp_path, 'schedule-service.sqlite3')

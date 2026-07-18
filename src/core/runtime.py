@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from auth import IdentityProvider, SQLiteLocalIdentityProvider
+from auth import IdentityProvider, RateLimiter, SQLiteLocalIdentityProvider, SQLiteRateLimiter
 from database import Database, apply_migrations, create_database
 from services import CampaignService, OutboxService, SessionService
 from web import AdminAccessService, AdminWebServer
@@ -16,6 +16,7 @@ class CoreRuntime:
     outbox: OutboxService
     access: AdminAccessService
     identities: IdentityProvider
+    rate_limiter: RateLimiter
     web_server: AdminWebServer
     web_base_url: str
 
@@ -38,12 +39,14 @@ class CoreRuntime:
             outbox = OutboxService(database)
             access = AdminAccessService(SQLiteWebSessionStore(database))
             identities = SQLiteLocalIdentityProvider(database)
+            rate_limiter = SQLiteRateLimiter(database)
             web_server = AdminWebServer(
                 access,
                 campaigns,
                 sessions,
                 outbox,
                 identities,
+                rate_limiter,
                 internal_token=internal_token,
                 web_base_url=web_base_url,
             )
@@ -58,6 +61,7 @@ class CoreRuntime:
             outbox=outbox,
             access=access,
             identities=identities,
+            rate_limiter=rate_limiter,
             web_server=web_server,
             web_base_url=web_base_url,
         )

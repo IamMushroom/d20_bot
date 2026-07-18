@@ -75,3 +75,13 @@ class MembershipRepository:
             (telegram_user_id,),
         )
         return tuple(_campaign(row) for row in rows)
+
+    async def remove_player(self, campaign_id: int, telegram_user_id: int) -> bool:
+        changed = await self._database.execute(
+            """DELETE FROM campaign_memberships
+            WHERE campaign_id = ? AND role = 'player' AND user_id = (
+                SELECT id FROM users WHERE telegram_user_id = ?
+            )""",
+            (campaign_id, telegram_user_id),
+        )
+        return changed > 0
