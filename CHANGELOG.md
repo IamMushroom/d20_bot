@@ -40,6 +40,8 @@
 
 ### Changed
 
+- `DB-001`: в SQLite database API добавлен явный контекст транзакции с атомарными `COMMIT` и
+  `ROLLBACK`; параллельные операции сериализуются, а вложенные транзакции явно запрещены.
 - `WEB-ARCH-001` (этап 1): HTTP request/response, маршрутизация и trusted proxy/cookie middleware
   вынесены из `AdminWebServer` в отдельные модули с сохранением совместимости существующих handlers.
 - `WEB-ARCH-001` (этап 2): internal API endpoints сгруппированы в отдельном `InternalApi` и

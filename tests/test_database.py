@@ -32,6 +32,70 @@ def test_database_factory_rejects_empty_path():
         asyncio.run(create_database('sqlite:///'))
 
 
+def test_transaction_commits_and_rolls_back_on_exception(tmp_path):
+    async def scenario():
+        database = await SQLiteDatabase.connect(str(tmp_path / 'transactions.sqlite3'))
+        await database.execute('CREATE TABLE samples (value TEXT NOT NULL)')
+
+        async with database.transaction():
+            await database.execute('INSERT INTO samples (value) VALUES (?)', ('committed',))
+
+        with pytest.raises(RuntimeError, match='abort transaction'):
+            async with database.transaction():
+                await database.execute('INSERT INTO samples (value) VALUES (?)', ('rolled back',))
+                raise RuntimeError('abort transaction')
+
+        rows = await database.fetch_all('SELECT value FROM samples ORDER BY rowid')
+        await database.close()
+        return rows
+
+    assert asyncio.run(scenario()) == [{'value': 'committed'}]
+
+
+def test_nested_transaction_and_executescript_are_rejected(tmp_path):
+    async def scenario():
+        database = await SQLiteDatabase.connect(str(tmp_path / 'nested.sqlite3'))
+        async with database.transaction():
+            with pytest.raises(RuntimeError, match='nested transactions'):
+                async with database.transaction():
+                    pass
+            with pytest.raises(RuntimeError, match='executescript'):
+                await database.executescript('SELECT 1;')
+            with pytest.raises(RuntimeError, match='cannot be closed'):
+                await database.close()
+        await database.close()
+
+    asyncio.run(scenario())
+
+
+def test_transaction_serializes_other_tasks(tmp_path):
+    async def scenario():
+        database = await SQLiteDatabase.connect(str(tmp_path / 'concurrent.sqlite3'))
+        await database.execute('CREATE TABLE samples (value TEXT NOT NULL)')
+        inserted = asyncio.Event()
+        release = asyncio.Event()
+
+        async def writer():
+            async with database.transaction():
+                await database.execute('INSERT INTO samples (value) VALUES (?)', ('visible',))
+                inserted.set()
+                await release.wait()
+
+        writer_task = asyncio.create_task(writer())
+        await inserted.wait()
+        reader_task = asyncio.create_task(database.fetch_all('SELECT value FROM samples'))
+        await asyncio.sleep(0)
+        assert not reader_task.done()
+
+        release.set()
+        await writer_task
+        rows = await reader_task
+        await database.close()
+        return rows
+
+    assert asyncio.run(scenario()) == [{'value': 'visible'}]
+
+
 def test_migrations_are_idempotent(tmp_path):
     async def scenario():
         database = await open_database(tmp_path)

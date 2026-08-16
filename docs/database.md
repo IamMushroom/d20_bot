@@ -68,6 +68,7 @@ sqlite:///:memory:
 
 ```python
 class Database(Protocol):
+    def transaction(self) -> AbstractAsyncContextManager[None]: ...
     async def execute(self, query, parameters=()) -> int: ...
     async def fetch_one(self, query, parameters=()) -> Row | None: ...
     async def fetch_all(self, query, parameters=()) -> list[Row]: ...
@@ -75,6 +76,7 @@ class Database(Protocol):
     async def close(self) -> None: ...
 ```
 
+- `transaction()` удерживает одну SQLite-транзакцию для всех запросов текущей asyncio-задачи.
 - `execute()` выполняет запрос и возвращает число изменённых строк.
 - `fetch_one()` возвращает одну строку как `Mapping` либо `None`.
 - `fetch_all()` возвращает список строк.
@@ -108,7 +110,20 @@ PRAGMA journal_mode = WAL;
 - `busy_timeout` позволяет подождать освобождения занятой базы до пяти секунд.
 - WAL улучшает совместную работу чтения и записи и упрощает создание резервных копий.
 
-Соединение работает в режиме autocommit. Атомарные операции репозиториев поэтому оформляются одним SQL-запросом. Если будущая операция требует нескольких связанных запросов, сначала следует расширить интерфейс явной поддержкой транзакций.
+Вне явной транзакции соединение работает в режиме autocommit. Связанные изменения можно
+выполнить атомарно через общий экземпляр `Database`:
+
+```python
+async with database.transaction():
+    await campaigns.set_title(chat_id, title)
+    await outbox.publish('campaign_updated', payload)
+```
+
+Успешный выход выполняет `COMMIT`, исключение — `ROLLBACK`. На время блока соединение закреплено
+за текущей asyncio-задачей, а запросы других задач ждут освобождения lock. Вложенные транзакции
+явно отклоняются с `RuntimeError`; `executescript()` и закрытие соединения внутри транзакции также
+запрещены. В транзакционном блоке нельзя ожидать Telegram/HTTP API, таймеры и другой внешний I/O —
+он должен содержать только короткие операции с локальным persistent state.
 
 ## Lifecycle приложения
 
