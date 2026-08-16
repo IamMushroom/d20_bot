@@ -18,11 +18,13 @@ Pytest строит отчёт о branch coverage. Порог задаётся �
 src/
 ├── commands/       # Telegram-обработчики и реестр команд
 ├── core/           # Runtime Core и клиент внутреннего API
-├── database/       # SQLite, миграции, модели и репозитории
+├── auth/           # интерфейсы и SQLite-адаптеры аутентификации/rate limiting
+├── database/       # SQLite, миграции и репозитории
+├── domain/         # независимые модели предметной области
 ├── dice/           # Парсер выражений и броски
 ├── log_format/     # JSON-форматирование логов
 ├── services/       # Сценарии кампаний, расписания и сессий
-├── web/            # HTTP API и панель мастера
+├── web/            # transport, Router, middleware, internal API и HTML-панель
 ├── run.py          # Telegram-бот
 └── run_core.py     # Core
 tests/              # Автоматические тесты

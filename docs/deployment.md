@@ -18,6 +18,7 @@
 | `D20_BOT_WEB_SECURE_COOKIE` | нет | `auto` | Secure-флаг cookie: `auto`, `true` или `false`. |
 | `D20_BOT_WEB_TRUSTED_PROXIES` | нет | — | Доверенные IP/CIDR reverse proxy через запятую. |
 | `D20_BOT_SQLITE_WEB_PORT` | нет | `8080` | Порт `sqlite-web` в debug-профиле. |
+| `D20_BOT_BACKUP_KEEP` | нет | `10` | Число production backup-файлов для хранения. |
 
 ## Локальный запуск
 
@@ -75,7 +76,9 @@ docker compose logs -f core
 адрес конкретного чата командой `/web_url`; настройка чата имеет приоритет.
 
 Мастер вызывает `/admin` в группе и получает одноразовую ссылку в личном диалоге. Ссылка
-действует 15 минут, HttpOnly-сессия — 8 часов. Сессии входа сбрасываются при перезапуске Core.
+действует 15 минут, HttpOnly-сессия — 8 часов. Login-токены и активные сессии хранятся в SQLite,
+поэтому переживают перезапуск Core; просроченные записи не проходят TTL-проверку и удаляются
+лениво. Локальная регистрация и обычный вход описаны в [authentication.md](authentication.md).
 
 `D20_BOT_WEB_SECURE_COOKIE=auto` включает Secure cookie по `X-Forwarded-Proto: https` только
 когда запрос пришёл от адреса из `D20_BOT_WEB_TRUSTED_PROXIES`. Укажите там адрес или сеть

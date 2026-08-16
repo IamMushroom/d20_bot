@@ -71,13 +71,14 @@ D20_BOT_CORE_TOKEN=<shared-secret>
 1. проверяет `D20_BOT_CORE_TOKEN`;
 2. открывает SQLite по `D20_BOT_DATABASE_URL`;
 3. применяет миграции из `migrations/`;
-4. создаёт сервисы кампаний и сессий;
+4. создаёт сервисы кампаний, сессий, outbox, аутентификации и rate limiting;
 5. запускает HTTP-сервер и панель мастера;
-6. при остановке закрывает HTTP-сервер, базу и Telegram-клиент.
+6. при остановке закрывает HTTP-сервер и базу.
 
 Core не получает `D20_BOT_TG_TOKEN` и не вызывает Telegram API. Изменения из веб-панели записываются
 в таблицу `outbox_events`. Connected-бот периодически получает неподтверждённые события через
-`POST /api/events`, выполняет Telegram-действие и подтверждает доставку. До подтверждения
+`GET /internal/events`, выполняет Telegram-действие и подтверждает доставку отдельным запросом.
+До подтверждения
 событие сохраняется в SQLite и переживает перезапуск обоих процессов. Доставка имеет
 семантику at-least-once: при сбое между Telegram-вызовом и подтверждением событие может быть
 выполнено повторно, но не будет молча потеряно.
@@ -89,7 +90,7 @@ outbox leasing и координация нескольких consumers пока
 
 ## Внутренний API
 
-Внутренний API предоставляет методы:
+Legacy action-based API пока предоставляет методы:
 
 - `POST /api/admin-link` — одноразовая ссылка мастера;
 - `POST /api/game` — чтение и изменение расписания, сохранение ID объявления;
@@ -99,7 +100,7 @@ outbox leasing и координация нескольких consumers пока
 - `POST /api/web-url` — адрес панели для конкретного чата.
 - `POST /api/events` — получение и подтверждение событий outbox.
 
-Для постепенной замены action-based API также доступны новые endpoints:
+Основной operation-oriented API предоставляет endpoints:
 
 - `GET /internal/events` — список ожидающих событий;
 - `POST /internal/events/{event_id}/ack` — подтверждение отдельного события.
@@ -134,11 +135,11 @@ outbox leasing и координация нескольких consumers пока
 Пример запроса ссылки:
 
 ```http
-POST /api/admin-link
+POST /internal/campaigns/-100123/admin-links
 Authorization: Bearer <D20_BOT_CORE_TOKEN>
 Content-Type: application/x-www-form-urlencoded
 
-chat_id=-100123&user_id=12345&chat_title=Campaign
+user_id=12345&chat_title=Campaign
 ```
 
 Core проверяет, что пользователь является мастером указанной кампании, создаёт одноразовый
@@ -214,8 +215,9 @@ SQL остаётся в репозиториях, бизнес-сценарии 
 - Docker-профиль `platform`.
 
 Все управляющие команды имеют Core API, монолитный режим удалён, исходящие Telegram-события
-передаются через постоянный outbox. Возможное дальнейшее улучшение — отделить внутренний API
-от HTML-сервера на уровне модулей и добавить lease для нескольких экземпляров бота.
+передаются через постоянный outbox. HTTP transport, Router, middleware, internal API и HTML
+handlers уже разделены по модулям; `AdminWebServer` остаётся composition root. Возможное
+дальнейшее улучшение — добавить lease для нескольких экземпляров бота.
 
 ## Диагностика
 

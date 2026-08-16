@@ -1,6 +1,9 @@
 # Модуль базы данных
 
-Модуль `src/database` хранит данные кампаний, персонажей, игровых сессий и рекапов. Сейчас поддерживается только SQLite, однако команды и репозитории зависят от интерфейса `Database`, а не от `sqlite3.Connection`. Это оставляет возможность заменить реализацию подключения без изменения пользовательской логики.
+Модуль `src/database` хранит данные кампаний, персонажей, игровых сессий, web-аутентификации,
+outbox и рекапов. Сейчас поддерживается только SQLite. Репозитории и сервисы Core зависят от
+интерфейса `Database`, а не от `sqlite3.Connection`; Telegram-команды обращаются к данным только
+через `CoreClient` и внутренний HTTP API.
 
 ## Структура
 
@@ -9,14 +12,17 @@ src/database/
 ├── __init__.py                 # публичные объекты модуля
 ├── connection.py               # Database, SQLiteDatabase и фабрика
 ├── migrations.py               # применение SQL-миграций
-├── models.py                   # неизменяемые модели данных
 └── repositories/
     ├── campaigns.py
     ├── characters.py
     ├── memberships.py
     ├── sessions.py
     ├── game_configs.py
+    ├── outbox.py
     └── recaps.py
+
+src/domain/
+└── models.py                   # независимые неизменяемые модели данных
 
 migrations/
 ├── 001_initial_schema.sql
@@ -27,14 +33,18 @@ migrations/
 ├── 006_web_base_url.sql
 ├── 007_outbox.sql
 ├── 008_campaign_settings.sql
-└── 009_campaign_memberships.sql
+├── 009_campaign_memberships.sql
+├── 010_web_auth.sql
+├── 011_local_auth.sql
+└── 012_auth_rate_limits.sql
 ```
 
 Telegram-команды не должны выполнять SQL или собирать бизнес-сценарии
 напрямую. Ожидаемый поток зависимостей:
 
 ```text
-Telegram command → service → repository → Database → SQLite
+Telegram command → CoreClient → internal HTTP API
+HTTP/page handler → service → repository → Database → SQLite
 ```
 
 Сервисы проверяют роли и координируют несколько репозиториев. Репозитории
@@ -94,7 +104,8 @@ row = await database.fetch_one(
 
 ## Реализация SQLite
 
-`SQLiteDatabase` использует стандартный модуль `sqlite3`. Блокирующие операции выполняются через `asyncio.to_thread()`, поэтому они не блокируют event loop Telegram-бота.
+`SQLiteDatabase` использует стандартный модуль `sqlite3`. Блокирующие операции выполняются через
+`asyncio.to_thread()`, поэтому они не блокируют event loop Core.
 
 Все операции одного экземпляра сериализуются через `asyncio.Lock`. Это защищает общее соединение от одновременного использования внутри процесса.
 
@@ -125,26 +136,18 @@ async with database.transaction():
 запрещены. В транзакционном блоке нельзя ожидать Telegram/HTTP API, таймеры и другой внешний I/O —
 он должен содержать только короткие операции с локальным persistent state.
 
-## Lifecycle приложения
+## Lifecycle Core
 
-База подключается в `initialize_application()` до регистрации команд Telegram:
+Единственный владелец базы — `CoreRuntime`:
 
-1. Читается `D20_BOT_DATABASE_URL`.
-2. Создаётся подключение.
-3. Применяются миграции.
-4. Подключение сохраняется в `application.bot_data['database']`.
-5. Создаются единые для приложения `CampaignService` и `SessionService`.
-6. Регистрируются команды бота.
+1. `CoreRuntime.start()` создаёт подключение по `D20_BOT_DATABASE_URL`.
+2. Применяет миграции.
+3. Создаёт общие экземпляры сервисов, session store, identity provider и rate limiter.
+4. Передаёт зависимости в `AdminWebServer` и запускает HTTP-сервер.
+5. `CoreRuntime.close()` сначала останавливает сервер, затем закрывает базу.
 
-Если миграция завершается ошибкой, подключение закрывается, а запуск приложения прекращается. При штатной остановке `shutdown_application()` извлекает базу из `bot_data` и закрывает её.
-
-Обработчики получают готовый сервис через helper, а не создают его на каждый update:
-
-```python
-from commands.helpers import session_service
-
-service = session_service(context)
-```
+Если миграция или запуск HTTP-сервера завершается ошибкой, подключение закрывается до повторного
+выброса исключения. Telegram-процесс не открывает базу ни в standalone-, ни в connected-режиме.
 
 ## Миграции
 
@@ -158,7 +161,7 @@ NNN_description.sql
 
 ```text
 001_initial_schema.sql
-002_add_recap_title.sql
+012_auth_rate_limits.sql
 ```
 
 Версия состоит ровно из трёх цифр. Файл с неправильным именем или повторяющейся версией останавливает запуск.
@@ -288,7 +291,7 @@ await sessions.finish(session.id)
 
 Попытка открыть вторую active-сессию преобразуется репозиторием из
 `sqlite3.IntegrityError` в `ActiveSessionExistsError`. Сервис возвращает типизированный статус
-`SessionStartStatus.ALREADY_ACTIVE`, поэтом SQLite-исключение не протекает в Telegram-слой.
+`SessionStartStatus.ALREADY_ACTIVE`, поэтому SQLite-исключение не протекает в транспортный слой.
 
 Миграция `004_unify_schedules_and_sessions.sql` переносит строки старой таблицы
 `game_schedules` в planned-сессии, сохраняя дату, Foundry URL и Telegram message ID,
@@ -335,7 +338,7 @@ Dev и production запускаются с разными Compose project names
 - запрет нескольких активных сессий;
 - создание, перенос и запуск planned-сессии;
 - перенос существующего расписания в `sessions` без потери рекапов;
-- инициализация и закрытие базы вместе с приложением.
+- инициализация и закрытие базы вместе с `CoreRuntime`.
 
 Запуск:
 
