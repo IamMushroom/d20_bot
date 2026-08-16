@@ -6,6 +6,11 @@ from datetime import UTC, datetime, timedelta
 from telegram.error import Forbidden
 
 from core.client import CoreClient, CoreClientError, CoreEvent
+from core.event_messages import (
+    game_scheduled_message,
+    session_started_message,
+    session_stopped_message,
+)
 
 EVENT_POLLER_KEY = 'core_event_poller'
 
@@ -17,14 +22,29 @@ def _integer(payload: dict[str, object], key: str) -> int:
     return value
 
 
+def _string(payload: dict[str, object], key: str) -> str:
+    value = payload.get(key)
+    if not isinstance(value, str) or not value:
+        raise ValueError(f'Invalid event field: {key}')
+    return value
+
+
 async def process_event(bot, client: CoreClient, event: CoreEvent) -> None:
     payload = event.payload
     chat_id = _integer(payload, 'chat_id')
     if event.event_type == 'game_scheduled':
-        message = payload.get('message')
         session_id = _integer(payload, 'session_id')
-        if not isinstance(message, str):
-            raise ValueError('Invalid event field: message')
+        try:
+            scheduled_at = datetime.fromisoformat(_string(payload, 'scheduled_at'))
+        except ValueError as error:
+            raise ValueError('Invalid event field: scheduled_at') from error
+        if scheduled_at.tzinfo is None:
+            raise ValueError('Invalid event field: scheduled_at')
+        message = game_scheduled_message(
+            scheduled_at,
+            _string(payload, 'timezone'),
+            _string(payload, 'foundry_url'),
+        )
         announcement = await bot.send_message(chat_id=chat_id, text=message)
         await client.set_game_announcement(session_id, announcement.id)
         await bot.pin_chat_message(
@@ -39,11 +59,13 @@ async def process_event(bot, client: CoreClient, event: CoreEvent) -> None:
         previous = payload.get('announcement_message_id')
         if isinstance(previous, int):
             await bot.unpin_chat_message(chat_id=chat_id, message_id=previous)
-        title_text = f' — {title}' if isinstance(title, str) and title else ''
-        await bot.send_message(chat_id=chat_id, text=f'▶️ Сессия №{number}{title_text} началась!')
+        await bot.send_message(
+            chat_id=chat_id,
+            text=session_started_message(number, title if isinstance(title, str) else None),
+        )
     elif event.event_type == 'session_stopped':
         number = _integer(payload, 'number')
-        await bot.send_message(chat_id=chat_id, text=f'⏹️ Сессия №{number} завершена.')
+        await bot.send_message(chat_id=chat_id, text=session_stopped_message(number))
     elif event.event_type == 'player_invited':
         requester_user_id = _integer(payload, 'requester_user_id')
         target_user_id = _integer(payload, 'target_user_id')

@@ -50,7 +50,7 @@ def test_commands_do_not_depend_on_database_implementation() -> None:
 def test_domain_does_not_depend_on_outer_layers() -> None:
     assert_no_imports(
         python_files(SRC / 'domain'),
-        {'commands', 'database', 'services', 'telegram', 'web'},
+        {'commands', 'core', 'database', 'services', 'telegram', 'web'},
     )
 
 
@@ -88,7 +88,7 @@ def test_services_do_not_construct_repositories() -> None:
 def test_services_do_not_depend_on_presentations() -> None:
     assert_no_imports(
         python_files(SRC / 'services'),
-        {'commands', 'telegram', 'web'},
+        {'commands', 'core', 'telegram', 'web'},
     )
 
 

@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+- `ARCH-012`: outbox-событие `game_scheduled` теперь содержит структурированные данные игры
+  вместо готового Telegram-текста; форматирование всех уведомлений о расписании и lifecycle
+  сессий принадлежит connected-consumer бота, а схемы событий и at-least-once semantics
+  задокументированы и защищены архитектурными и regression-тестами.
+
 - `TEST-002`: структура `tests/` приведена к пакетной структуре `src/`: тесты разнесены по
   `auth`, `commands`, `core`, `database`, `dice`, `log_format`, `services` и `web`, а проверки
   корневых entrypoint-модулей оставлены на верхнем уровне.

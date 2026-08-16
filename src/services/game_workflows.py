@@ -1,7 +1,6 @@
 from datetime import datetime
 
 from database.connection import Database
-from game import game_message
 from services.outbox import OutboxService
 from services.sessions import (
     ScheduleUpdate,
@@ -34,12 +33,17 @@ class GameWorkflowService:
         async with self._database.transaction():
             result = await self._sessions.schedule(chat_id, chat_title, scheduled_at, foundry_url)
             timezone_name = await self._sessions.get_announcement_timezone(chat_id)
+            session = result.session
+            assert session.scheduled_at is not None
+            assert session.foundry_url is not None
             await self._outbox.publish(
                 'game_scheduled',
                 {
                     'chat_id': chat_id,
-                    'session_id': result.session.id,
-                    'message': game_message(result.session, timezone_name),
+                    'session_id': session.id,
+                    'scheduled_at': session.scheduled_at.isoformat(),
+                    'timezone': timezone_name,
+                    'foundry_url': session.foundry_url,
                     'previous_message_id': result.previous_message_id,
                 },
             )

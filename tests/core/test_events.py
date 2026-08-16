@@ -100,7 +100,15 @@ def test_game_workflow_commits_state_and_event_together(tmp_path):
     result, events = asyncio.run(scenario())
     assert len(events) == 1
     assert events[0].event_type == 'game_scheduled'
-    assert events[0].payload['session_id'] == result.session.id
+    assert events[0].payload == {
+        'chat_id': -100,
+        'session_id': result.session.id,
+        'scheduled_at': '2026-08-20T19:00:00+00:00',
+        'timezone': 'Europe/Moscow',
+        'foundry_url': 'https://foundry.example',
+        'previous_message_id': None,
+    }
+    assert 'message' not in events[0].payload
 
 
 def test_outbox_failure_rolls_back_session_state(tmp_path, monkeypatch):
@@ -171,7 +179,9 @@ def test_processes_all_outbox_event_types():
                 {
                     'chat_id': -100,
                     'session_id': 4,
-                    'message': 'Game',
+                    'scheduled_at': '2026-08-20T19:00:00+00:00',
+                    'timezone': 'Europe/Moscow',
+                    'foundry_url': 'https://foundry.example',
                     'previous_message_id': 40,
                 },
             ),
@@ -188,6 +198,9 @@ def test_processes_all_outbox_event_types():
 
     bot, client = asyncio.run(scenario())
     client.set_game_announcement.assert_awaited_once_with(4, 50)
+    assert bot.send_message.await_args_list[0].kwargs['text'] == (
+        '🎲 Следующая игра: 20.08.2026 в 22:00 (Europe/Moscow)\n🏰 Foundry: https://foundry.example'
+    )
     bot.pin_chat_message.assert_awaited_once()
     assert bot.unpin_chat_message.await_count == 2
     assert client.acknowledge_event.await_count == 3
@@ -263,6 +276,35 @@ def test_rejects_invalid_or_unknown_outbox_event():
         asyncio.run(process_event(bot, client, CoreEvent(1, 'session_stopped', {})))
     with pytest.raises(ValueError, match='Unknown'):
         asyncio.run(process_event(bot, client, CoreEvent(2, 'unknown', {'chat_id': 1})))
+    client.acknowledge_event.assert_not_awaited()
+
+
+def test_rejects_invalid_structured_game_event_without_acknowledging():
+    bot = SimpleNamespace(send_message=AsyncMock())
+    client = SimpleNamespace(acknowledge_event=AsyncMock())
+    event = CoreEvent(
+        3,
+        'game_scheduled',
+        {
+            'chat_id': -100,
+            'session_id': 4,
+            'scheduled_at': 'not-a-date',
+            'timezone': 'Europe/Moscow',
+            'foundry_url': 'https://foundry.example',
+        },
+    )
+    with pytest.raises(ValueError, match='scheduled_at'):
+        asyncio.run(process_event(bot, client, event))
+    bot.send_message.assert_not_awaited()
+    client.acknowledge_event.assert_not_awaited()
+
+
+def test_failed_telegram_delivery_does_not_acknowledge_event():
+    bot = SimpleNamespace(send_message=AsyncMock(side_effect=RuntimeError('Telegram unavailable')))
+    client = SimpleNamespace(acknowledge_event=AsyncMock())
+    event = CoreEvent(3, 'session_stopped', {'chat_id': -100, 'number': 4})
+    with pytest.raises(RuntimeError, match='Telegram unavailable'):
+        asyncio.run(process_event(bot, client, event))
     client.acknowledge_event.assert_not_awaited()
 
 
