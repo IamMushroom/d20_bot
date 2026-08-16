@@ -1148,6 +1148,142 @@ def test_internal_session_api(tmp_path):
     ]
 
 
+def test_operation_oriented_game_and_session_api(tmp_path):
+    async def scenario():
+        database, campaigns, sessions, access, bot = await setup(tmp_path)
+        server = AdminWebServer(database, access, campaigns, sessions, bot, internal_token='secret')
+        headers = {'authorization': 'Bearer secret'}
+        unauthorized = await server._route('GET', '/internal/campaigns/-100/game', {}, b'')
+        invalid_campaign = await server._route('GET', '/internal/campaigns/nope/game', headers, b'')
+        invalid_schedule = await server._route(
+            'PUT', '/internal/campaigns/-100/game', headers, b'scheduled_at=nope'
+        )
+        unauthorized_schedule = await server._route(
+            'PUT', '/internal/campaigns/-100/game', {}, b'scheduled_at=nope'
+        )
+        invalid_schedule_campaign = await server._route(
+            'PUT', '/internal/campaigns/nope/game', headers, b'scheduled_at=nope'
+        )
+        await sessions.set_default_url(-100, 'https://foundry.example', datetime.now(UTC))
+        scheduled = await server._route(
+            'PUT',
+            '/internal/campaigns/-100/game',
+            headers,
+            b'scheduled_at=2026-07-20T19%3A00%3A00%2B00%3A00',
+        )
+        session_id = json.loads(scheduled[2])['session_id']
+        shown = await server._route('GET', '/internal/campaigns/-100/game', headers, b'')
+        invalid_announcement = await server._route(
+            'POST',
+            f'/internal/sessions/{session_id}/announcement',
+            headers,
+            b'message_id=nope',
+        )
+        unauthorized_announcement = await server._route(
+            'POST', f'/internal/sessions/{session_id}/announcement', {}, b'message_id=99'
+        )
+        negative_announcement = await server._route(
+            'POST', '/internal/sessions/-1/announcement', headers, b'message_id=99'
+        )
+        announcement = await server._route(
+            'POST',
+            f'/internal/sessions/{session_id}/announcement',
+            headers,
+            b'message_id=99',
+        )
+        invalid_start = await server._route(
+            'POST', '/internal/campaigns/-100/sessions/start', headers, b'user_id=nope'
+        )
+        unauthorized_start = await server._route(
+            'POST', '/internal/campaigns/-100/sessions/start', {}, b'user_id=7'
+        )
+        long_title = await server._route(
+            'POST',
+            '/internal/campaigns/-100/sessions/start',
+            headers,
+            f'user_id=7&title={"x" * 101}'.encode(),
+        )
+        forbidden_start = await server._route(
+            'POST', '/internal/campaigns/-100/sessions/start', headers, b'user_id=8'
+        )
+        started = await server._route(
+            'POST',
+            '/internal/campaigns/-100/sessions/start',
+            headers,
+            b'user_id=7&title=Tower',
+        )
+        duplicate_start = await server._route(
+            'POST', '/internal/campaigns/-100/sessions/start', headers, b'user_id=7'
+        )
+        forbidden_stop = await server._route(
+            'POST', '/internal/campaigns/-100/sessions/stop', headers, b'user_id=8'
+        )
+        unauthorized_stop = await server._route(
+            'POST', '/internal/campaigns/-100/sessions/stop', {}, b'user_id=7'
+        )
+        invalid_stop = await server._route(
+            'POST', '/internal/campaigns/nope/sessions/stop', headers, b'user_id=7'
+        )
+        stopped = await server._route(
+            'POST', '/internal/campaigns/-100/sessions/stop', headers, b'user_id=7'
+        )
+        second_stop = await server._route(
+            'POST', '/internal/campaigns/-100/sessions/stop', headers, b'user_id=7'
+        )
+        planned = await sessions.get_planned(-100)
+        await database.close()
+        return (
+            unauthorized,
+            invalid_campaign,
+            invalid_schedule,
+            unauthorized_schedule,
+            invalid_schedule_campaign,
+            scheduled,
+            shown,
+            invalid_announcement,
+            unauthorized_announcement,
+            negative_announcement,
+            announcement,
+            invalid_start,
+            unauthorized_start,
+            long_title,
+            forbidden_start,
+            started,
+            duplicate_start,
+            forbidden_stop,
+            unauthorized_stop,
+            invalid_stop,
+            stopped,
+            second_stop,
+            planned,
+        )
+
+    results = asyncio.run(scenario())
+    assert json.loads(results[0][2])['error']['code'] == 'unauthorized'
+    assert json.loads(results[1][2])['error']['code'] == 'invalid_campaign_id'
+    assert json.loads(results[2][2])['error']['code'] == 'invalid_game_schedule'
+    assert json.loads(results[3][2])['error']['code'] == 'unauthorized'
+    assert json.loads(results[4][2])['error']['code'] == 'invalid_campaign_id'
+    assert results[5][0] is HTTPStatus.OK
+    assert b'Foundry' in results[6][2]
+    assert json.loads(results[7][2])['error']['code'] == 'invalid_announcement'
+    assert json.loads(results[8][2])['error']['code'] == 'unauthorized'
+    assert json.loads(results[9][2])['error']['code'] == 'invalid_announcement'
+    assert results[10][0] is HTTPStatus.OK
+    assert json.loads(results[11][2])['error']['code'] == 'invalid_session_request'
+    assert json.loads(results[12][2])['error']['code'] == 'unauthorized'
+    assert json.loads(results[13][2])['error']['code'] == 'title_too_long'
+    assert json.loads(results[14][2])['status'] == 'forbidden'
+    assert json.loads(results[15][2])['status'] == 'started'
+    assert json.loads(results[16][2])['status'] == 'already_active'
+    assert json.loads(results[17][2])['status'] == 'forbidden'
+    assert json.loads(results[18][2])['error']['code'] == 'unauthorized'
+    assert json.loads(results[19][2])['error']['code'] == 'invalid_session_request'
+    assert json.loads(results[20][2])['status'] == 'stopped'
+    assert json.loads(results[21][2])['status'] == 'no_active_session'
+    assert results[22] is None
+
+
 def test_internal_role_api(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)

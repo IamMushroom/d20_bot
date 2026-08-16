@@ -126,6 +126,13 @@ def test_core_client_game_api(monkeypatch):
     assert player.name == 'Tilly'
     assert web_url == 'https://d20.example'
     assert request.await_count == 11
+    assert request.await_args_list[0].args[0] == '/internal/campaigns/-100/game'
+    assert request.await_args_list[0].kwargs == {'method': 'GET'}
+    assert request.await_args_list[1].args[0] == '/internal/campaigns/-100/game'
+    assert request.await_args_list[1].kwargs == {'method': 'PUT'}
+    assert request.await_args_list[2].args[0] == '/internal/sessions/3/announcement'
+    assert request.await_args_list[5].args[0] == '/internal/campaigns/-100/sessions/start'
+    assert request.await_args_list[6].args[0] == '/internal/campaigns/-100/sessions/stop'
 
 
 def test_core_client_rejects_invalid_game_payloads(monkeypatch):

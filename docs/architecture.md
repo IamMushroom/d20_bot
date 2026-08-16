@@ -103,6 +103,11 @@ outbox leasing и координация нескольких consumers пока
 
 - `GET /internal/events` — список ожидающих событий;
 - `POST /internal/events/{event_id}/ack` — подтверждение отдельного события.
+- `GET /internal/campaigns/{chat_id}/game` — текущее расписание кампании;
+- `PUT /internal/campaigns/{chat_id}/game` — назначение или перенос игры;
+- `POST /internal/sessions/{session_id}/announcement` — сохранение Telegram message ID;
+- `POST /internal/campaigns/{chat_id}/sessions/start` — старт игровой сессии;
+- `POST /internal/campaigns/{chat_id}/sessions/stop` — завершение игровой сессии.
 
 Ошибки новых `/internal/*` endpoints имеют единый контракт:
 

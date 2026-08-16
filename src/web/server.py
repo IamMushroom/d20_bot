@@ -85,6 +85,25 @@ class AdminWebServer:
         self._router.add('POST', '/api/events', self._api.events)
         self._router.add('GET', '/internal/events', self._api.list_events)
         self._router.add('POST', '/internal/events/{event_id}/ack', self._api.acknowledge_event)
+        self._router.add('GET', '/internal/campaigns/{chat_id}/game', self._api.get_campaign_game)
+        self._router.add(
+            'PUT', '/internal/campaigns/{chat_id}/game', self._api.schedule_campaign_game
+        )
+        self._router.add(
+            'POST',
+            '/internal/sessions/{session_id}/announcement',
+            self._api.set_session_announcement,
+        )
+        self._router.add(
+            'POST',
+            '/internal/campaigns/{chat_id}/sessions/start',
+            self._api.start_campaign_session,
+        )
+        self._router.add(
+            'POST',
+            '/internal/campaigns/{chat_id}/sessions/stop',
+            self._api.stop_campaign_session,
+        )
         for method, path in PAGE_ROUTES:
             self._router.add(method, path, self._pages.dispatch)
 

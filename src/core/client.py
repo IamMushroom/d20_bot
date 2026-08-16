@@ -60,7 +60,7 @@ class CoreClient:
         return self._string(payload, 'code')
 
     async def get_game(self, chat_id: int) -> str:
-        payload = await self._request('/api/game', {'action': 'get', 'chat_id': chat_id})
+        payload = await self._request(f'/internal/campaigns/{chat_id}/game', {}, method='GET')
         return self._string(payload, 'message')
 
     async def schedule_game(
@@ -71,14 +71,13 @@ class CoreClient:
         foundry_url: str | None,
     ) -> ScheduledGame:
         payload = await self._request(
-            '/api/game',
+            f'/internal/campaigns/{chat_id}/game',
             {
-                'action': 'schedule',
-                'chat_id': chat_id,
                 'chat_title': chat_title or '',
                 'scheduled_at': scheduled_at.isoformat(),
                 'foundry_url': foundry_url or '',
             },
+            method='PUT',
         )
         session_id = payload.get('session_id')
         previous = payload.get('previous_message_id')
@@ -88,8 +87,8 @@ class CoreClient:
 
     async def set_game_announcement(self, session_id: int, message_id: int) -> None:
         await self._request(
-            '/api/game',
-            {'action': 'set_announcement', 'session_id': session_id, 'message_id': message_id},
+            f'/internal/sessions/{session_id}/announcement',
+            {'message_id': message_id},
         )
 
     async def get_game_url(self, chat_id: int) -> str | None:
@@ -120,8 +119,8 @@ class CoreClient:
         self, chat_id: int, user_id: int, title: str | None
     ) -> SessionTransition:
         payload = await self._request(
-            '/api/session',
-            {'action': 'start', 'chat_id': chat_id, 'user_id': user_id, 'title': title or ''},
+            f'/internal/campaigns/{chat_id}/sessions/start',
+            {'user_id': user_id, 'title': title or ''},
         )
         transition = self._session_transition(payload)
         if transition.status not in {'started', 'forbidden', 'already_active'}:
@@ -130,7 +129,7 @@ class CoreClient:
 
     async def stop_session(self, chat_id: int, user_id: int) -> SessionTransition:
         payload = await self._request(
-            '/api/session', {'action': 'stop', 'chat_id': chat_id, 'user_id': user_id}
+            f'/internal/campaigns/{chat_id}/sessions/stop', {'user_id': user_id}
         )
         transition = self._session_transition(payload)
         if transition.status not in {'stopped', 'forbidden', 'no_active_session'}:

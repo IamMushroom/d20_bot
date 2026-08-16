@@ -192,6 +192,138 @@ class InternalApi:
             return self._json(HTTPStatus.OK, {'status': 'stopped', 'number': session.number})
         return self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_action'})
 
+    async def get_campaign_game(self, request: Request) -> ResponseTuple:
+        unauthorized = self._require_authorization(request)
+        if unauthorized is not None:
+            return unauthorized
+        chat_id = self._path_integer(request, 'chat_id')
+        if chat_id is None:
+            return self._error(
+                HTTPStatus.BAD_REQUEST, 'invalid_campaign_id', 'Campaign ID must be an integer.'
+            )
+        session = await self._sessions.get_planned(chat_id)
+        timezone_name = await self._sessions.get_announcement_timezone(chat_id)
+        message = (
+            game_message(session, timezone_name)
+            if session
+            else '📅 Следующая игра пока не назначена.'
+        )
+        return self._json(HTTPStatus.OK, {'message': message})
+
+    async def schedule_campaign_game(self, request: Request) -> ResponseTuple:
+        unauthorized = self._require_authorization(request)
+        if unauthorized is not None:
+            return unauthorized
+        chat_id = self._path_integer(request, 'chat_id')
+        if chat_id is None:
+            return self._error(
+                HTTPStatus.BAD_REQUEST, 'invalid_campaign_id', 'Campaign ID must be an integer.'
+            )
+        form = request.form
+        try:
+            scheduled_at = datetime.fromisoformat(form['scheduled_at'][0])
+            chat_title = form.get('chat_title', [''])[0] or None
+            foundry_url = form.get('foundry_url', [''])[0]
+            if not foundry_url:
+                foundry_url = await self._sessions.get_default_url(chat_id) or getenv(
+                    'D20_BOT_FOUNDRY_URL', ''
+                )
+            if scheduled_at.tzinfo is None or not valid_url(foundry_url):
+                raise ValueError
+        except KeyError, ValueError, IndexError:
+            return self._error(
+                HTTPStatus.BAD_REQUEST,
+                'invalid_game_schedule',
+                'A timezone-aware date and valid Foundry URL are required.',
+            )
+        result = await self._sessions.schedule(
+            chat_id, chat_title, scheduled_at.astimezone(UTC), foundry_url
+        )
+        return self._json(
+            HTTPStatus.OK,
+            {
+                'session_id': result.session.id,
+                'message': game_message(
+                    result.session,
+                    await self._sessions.get_announcement_timezone(chat_id),
+                ),
+                'previous_message_id': result.previous_message_id,
+            },
+        )
+
+    async def set_session_announcement(self, request: Request) -> ResponseTuple:
+        unauthorized = self._require_authorization(request)
+        if unauthorized is not None:
+            return unauthorized
+        session_id = self._path_integer(request, 'session_id')
+        try:
+            message_id = int(request.form['message_id'][0])
+            if session_id is None or session_id <= 0 or message_id <= 0:
+                raise ValueError
+        except KeyError, ValueError, IndexError:
+            return self._error(
+                HTTPStatus.BAD_REQUEST,
+                'invalid_announcement',
+                'Session ID and message ID must be positive integers.',
+            )
+        await self._sessions.set_announcement(session_id, message_id)
+        return self._json(HTTPStatus.OK, {'ok': True})
+
+    async def start_campaign_session(self, request: Request) -> ResponseTuple:
+        unauthorized = self._require_authorization(request)
+        if unauthorized is not None:
+            return unauthorized
+        identifiers = self._campaign_and_user(request)
+        if identifiers is None:
+            return self._error(
+                HTTPStatus.BAD_REQUEST,
+                'invalid_session_request',
+                'Campaign ID and user ID must be integers.',
+            )
+        chat_id, user_id = identifiers
+        title = request.form.get('title', [''])[0].strip() or None
+        if title is not None and len(title) > 100:
+            return self._error(
+                HTTPStatus.BAD_REQUEST, 'title_too_long', 'Session title exceeds 100 characters.'
+            )
+        result = await self._sessions.start(chat_id, user_id, title)
+        if result.status is SessionStartStatus.FORBIDDEN:
+            return self._json(HTTPStatus.OK, {'status': 'forbidden'})
+        if result.status is SessionStartStatus.ALREADY_ACTIVE:
+            return self._json(HTTPStatus.OK, {'status': 'already_active'})
+        session = result.session
+        assert session is not None
+        return self._json(
+            HTTPStatus.OK,
+            {
+                'status': 'started',
+                'number': session.number,
+                'title': session.title,
+                'announcement_message_id': result.announcement_message_id,
+            },
+        )
+
+    async def stop_campaign_session(self, request: Request) -> ResponseTuple:
+        unauthorized = self._require_authorization(request)
+        if unauthorized is not None:
+            return unauthorized
+        identifiers = self._campaign_and_user(request)
+        if identifiers is None:
+            return self._error(
+                HTTPStatus.BAD_REQUEST,
+                'invalid_session_request',
+                'Campaign ID and user ID must be integers.',
+            )
+        chat_id, user_id = identifiers
+        result = await self._sessions.stop(chat_id, user_id)
+        if result.status is SessionStopStatus.FORBIDDEN:
+            return self._json(HTTPStatus.OK, {'status': 'forbidden'})
+        if result.status is SessionStopStatus.NO_ACTIVE_SESSION:
+            return self._json(HTTPStatus.OK, {'status': 'no_active_session'})
+        session = result.session
+        assert session is not None
+        return self._json(HTTPStatus.OK, {'status': 'stopped', 'number': session.number})
+
     async def role(self, request: Request) -> ResponseTuple:
         if not self._authorized(request.headers):
             return self._json(HTTPStatus.UNAUTHORIZED, {'error': 'unauthorized'})
@@ -307,6 +439,30 @@ class InternalApi:
             authorization.removeprefix('Bearer ') if authorization.startswith('Bearer ') else ''
         )
         return bool(self._internal_token) and secrets.compare_digest(supplied, self._internal_token)
+
+    def _require_authorization(self, request: Request) -> ResponseTuple | None:
+        if self._authorized(request.headers):
+            return None
+        return self._error(
+            HTTPStatus.UNAUTHORIZED,
+            'unauthorized',
+            'A valid Core bearer token is required.',
+        )
+
+    @staticmethod
+    def _path_integer(request: Request, name: str) -> int | None:
+        try:
+            return int(request.path_parameters[name])
+        except KeyError, ValueError:
+            return None
+
+    def _campaign_and_user(self, request: Request) -> tuple[int, int] | None:
+        chat_id = self._path_integer(request, 'chat_id')
+        try:
+            user_id = int(request.form['user_id'][0])
+        except KeyError, ValueError, IndexError:
+            return None
+        return (chat_id, user_id) if chat_id is not None else None
 
     async def _rate_limit(self, key: str, limit: int, window: timedelta) -> ResponseTuple | None:
         if self._rate_limiter is None:
