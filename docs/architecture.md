@@ -108,6 +108,12 @@ outbox leasing и координация нескольких consumers пока
 - `POST /internal/sessions/{session_id}/announcement` — сохранение Telegram message ID;
 - `POST /internal/campaigns/{chat_id}/sessions/start` — старт игровой сессии;
 - `POST /internal/campaigns/{chat_id}/sessions/stop` — завершение игровой сессии.
+- `POST /internal/auth/registration-codes` — выпуск одноразового кода регистрации;
+- `POST /internal/campaigns/{chat_id}/admin-links` — выпуск ссылки web-панели;
+- `PUT /internal/campaigns/{chat_id}/master` — назначение мастера;
+- `POST /internal/campaigns/{chat_id}/players` — регистрация персонажа игрока;
+- `GET|PUT /internal/campaigns/{chat_id}/foundry-url` — чтение и изменение Foundry URL;
+- `GET|PUT /internal/campaigns/{chat_id}/web-url` — чтение и изменение адреса панели.
 
 Ошибки новых `/internal/*` endpoints имеют единый контракт:
 
@@ -121,7 +127,9 @@ outbox leasing и координация нескольких consumers пока
 ```
 
 Клиенты принимают решения по стабильному `code`, а `message` предназначен для диагностики.
-Старые `/api/*` endpoints сохраняются до поэтапного перевода всех методов `CoreClient`.
+Все методы `CoreClient` используют `/internal/*`. Старые `/api/*` endpoints пока сохраняются для
+совместимости уже запущенных экземпляров Bot и должны удаляться только отдельным изменением после
+явно выбранного compatibility window.
 
 Пример запроса ссылки:
 

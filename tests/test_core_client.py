@@ -22,9 +22,9 @@ def test_core_client_requests_admin_link(monkeypatch):
 
     assert result == 'https://d20.example/login'
     request = urlopen.call_args.args[0]
-    assert request.full_url == 'http://core:8190/api/admin-link'
+    assert request.full_url == 'http://core:8190/internal/campaigns/-100/admin-links'
     assert request.headers['Authorization'] == 'Bearer secret'
-    assert b'chat_id=-100' in request.data
+    assert b'user_id=7' in request.data
 
 
 def test_core_client_requests_registration_code(monkeypatch):
@@ -32,7 +32,7 @@ def test_core_client_requests_registration_code(monkeypatch):
     monkeypatch.setattr(CoreClient, '_request', request)
     code = asyncio.run(CoreClient('http://core', 'secret').create_registration_code(7))
     assert code == 'ABCD-EFGH-JKLM'
-    request.assert_awaited_once_with('/api/auth/registration', {'user_id': 7})
+    request.assert_awaited_once_with('/internal/auth/registration-codes', {'user_id': 7})
 
 
 @pytest.mark.parametrize(
@@ -133,6 +133,13 @@ def test_core_client_game_api(monkeypatch):
     assert request.await_args_list[2].args[0] == '/internal/sessions/3/announcement'
     assert request.await_args_list[5].args[0] == '/internal/campaigns/-100/sessions/start'
     assert request.await_args_list[6].args[0] == '/internal/campaigns/-100/sessions/stop'
+    assert request.await_args_list[3].args[0] == '/internal/campaigns/-100/foundry-url'
+    assert request.await_args_list[4].kwargs == {'method': 'PUT'}
+    assert request.await_args_list[7].args[0] == '/internal/campaigns/-100/master'
+    assert request.await_args_list[7].kwargs == {'method': 'PUT'}
+    assert request.await_args_list[8].args[0] == '/internal/campaigns/-100/players'
+    assert request.await_args_list[9].args[0] == '/internal/campaigns/-100/web-url'
+    assert request.await_args_list[10].kwargs == {'method': 'PUT'}
 
 
 def test_core_client_rejects_invalid_game_payloads(monkeypatch):

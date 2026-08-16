@@ -370,6 +370,161 @@ class InternalApi:
             return self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_request'})
         return self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_action'})
 
+    async def create_registration_code(self, request: Request) -> ResponseTuple:
+        unauthorized = self._require_authorization(request)
+        if unauthorized is not None:
+            return unauthorized
+        if self._identities is None:
+            return self._error(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                'auth_disabled',
+                'Local authentication is disabled.',
+            )
+        try:
+            user_id = int(request.form['user_id'][0])
+        except KeyError, ValueError, IndexError:
+            return self._error(
+                HTTPStatus.BAD_REQUEST, 'invalid_user_id', 'User ID must be an integer.'
+            )
+        limited = await self._rate_limit(f'registration-code:{user_id}', 5, timedelta(minutes=15))
+        if limited is not None:
+            return self._normalized_rate_limit(limited)
+        try:
+            code = await self._identities.issue_registration_code(user_id)
+        except UnknownTelegramUser:
+            return self._error(
+                HTTPStatus.NOT_FOUND,
+                'unknown_user',
+                'Telegram user is not known to Core.',
+            )
+        return self._json(HTTPStatus.OK, {'code': code})
+
+    async def create_admin_link(self, request: Request) -> ResponseTuple:
+        unauthorized = self._require_authorization(request)
+        if unauthorized is not None:
+            return unauthorized
+        chat_id = self._path_integer(request, 'chat_id')
+        try:
+            user_id = int(request.form['user_id'][0])
+            chat_title = request.form.get('chat_title', [None])[0] or None
+            if chat_id is None:
+                raise ValueError
+        except KeyError, ValueError, IndexError:
+            return self._error(
+                HTTPStatus.BAD_REQUEST,
+                'invalid_admin_link_request',
+                'Campaign ID and user ID must be integers.',
+            )
+        if not await self._campaigns.is_master(chat_id, user_id):
+            return self._error(
+                HTTPStatus.FORBIDDEN,
+                'campaign_master_required',
+                'Only the campaign master may create an admin link.',
+            )
+        limited = await self._rate_limit(f'admin-link:{user_id}', 5, timedelta(minutes=10))
+        if limited is not None:
+            return self._normalized_rate_limit(limited)
+        base_url = await self._sessions.get_web_base_url(chat_id) or self._web_base_url
+        if not base_url:
+            return self._error(
+                HTTPStatus.CONFLICT,
+                'web_url_not_configured',
+                'Web panel URL is not configured.',
+            )
+        token = await self._access.create_login(AdminIdentity(chat_id, user_id, chat_title))
+        return self._json(HTTPStatus.OK, {'url': f'{base_url.rstrip("/")}/login?token={token}'})
+
+    async def assign_campaign_master(self, request: Request) -> ResponseTuple:
+        unauthorized = self._require_authorization(request)
+        if unauthorized is not None:
+            return unauthorized
+        identifiers = self._campaign_and_user(request)
+        if identifiers is None:
+            return self._error(
+                HTTPStatus.BAD_REQUEST,
+                'invalid_role_request',
+                'Campaign ID and user ID must be integers.',
+            )
+        chat_id, user_id = identifiers
+        chat_title = request.form.get('chat_title', [''])[0] or None
+        await self._campaigns.assign_master(chat_id, user_id, chat_title)
+        return self._json(HTTPStatus.OK, {'ok': True})
+
+    async def register_campaign_player(self, request: Request) -> ResponseTuple:
+        unauthorized = self._require_authorization(request)
+        if unauthorized is not None:
+            return unauthorized
+        identifiers = self._campaign_and_user(request)
+        name = request.form.get('name', [''])[0].strip()
+        if identifiers is None or not name or len(name) > 16:
+            return self._error(
+                HTTPStatus.BAD_REQUEST,
+                'invalid_player',
+                'User ID and a player name of 1 to 16 characters are required.',
+            )
+        chat_id, user_id = identifiers
+        chat_title = request.form.get('chat_title', [''])[0] or None
+        result = await self._campaigns.register_player(chat_id, user_id, name, chat_title)
+        if result.status is PlayerRegistrationStatus.MASTER_CONFLICT:
+            return self._json(HTTPStatus.OK, {'status': 'master_conflict'})
+        character = result.character
+        assert character is not None
+        return self._json(HTTPStatus.OK, {'status': 'registered', 'name': character.name})
+
+    async def get_foundry_url(self, request: Request) -> ResponseTuple:
+        unauthorized = self._require_authorization(request)
+        if unauthorized is not None:
+            return unauthorized
+        chat_id = self._path_integer(request, 'chat_id')
+        if chat_id is None:
+            return self._error(
+                HTTPStatus.BAD_REQUEST, 'invalid_campaign_id', 'Campaign ID must be an integer.'
+            )
+        url = await self._sessions.get_default_url(chat_id) or getenv('D20_BOT_FOUNDRY_URL', '')
+        return self._json(HTTPStatus.OK, {'url': url if valid_url(url) else None})
+
+    async def set_foundry_url(self, request: Request) -> ResponseTuple:
+        unauthorized = self._require_authorization(request)
+        if unauthorized is not None:
+            return unauthorized
+        chat_id = self._path_integer(request, 'chat_id')
+        foundry_url = request.form.get('foundry_url', [''])[0]
+        if chat_id is None or not valid_url(foundry_url):
+            return self._error(
+                HTTPStatus.BAD_REQUEST,
+                'invalid_foundry_url',
+                'Campaign ID and a valid Foundry URL are required.',
+            )
+        await self._sessions.set_default_url(chat_id, foundry_url, datetime.now(UTC))
+        return self._json(HTTPStatus.OK, {'ok': True})
+
+    async def get_campaign_web_url(self, request: Request) -> ResponseTuple:
+        unauthorized = self._require_authorization(request)
+        if unauthorized is not None:
+            return unauthorized
+        chat_id = self._path_integer(request, 'chat_id')
+        if chat_id is None:
+            return self._error(
+                HTTPStatus.BAD_REQUEST, 'invalid_campaign_id', 'Campaign ID must be an integer.'
+            )
+        url = await self._sessions.get_web_base_url(chat_id) or self._web_base_url
+        return self._json(HTTPStatus.OK, {'url': url or None})
+
+    async def set_campaign_web_url(self, request: Request) -> ResponseTuple:
+        unauthorized = self._require_authorization(request)
+        if unauthorized is not None:
+            return unauthorized
+        chat_id = self._path_integer(request, 'chat_id')
+        web_url = request.form.get('web_url', [''])[0].rstrip('/')
+        if chat_id is None or not valid_url(web_url):
+            return self._error(
+                HTTPStatus.BAD_REQUEST,
+                'invalid_web_url',
+                'Campaign ID and a valid web URL are required.',
+            )
+        await self._sessions.set_web_base_url(chat_id, web_url, datetime.now(UTC))
+        return self._json(HTTPStatus.OK, {'ok': True})
+
     async def events(self, request: Request) -> ResponseTuple:
         if not self._authorized(request.headers):
             return self._json(HTTPStatus.UNAUTHORIZED, {'error': 'unauthorized'})
@@ -475,6 +630,16 @@ class InternalApi:
             {'error': 'rate_limited', 'retry_after': result.retry_after},
         )
         return status, {**headers, 'Retry-After': str(result.retry_after)}, body
+
+    @classmethod
+    def _normalized_rate_limit(cls, response: ResponseTuple) -> ResponseTuple:
+        status, headers, _body = response
+        normalized = cls._error(
+            status,
+            'rate_limited',
+            'Too many requests. Retry later.',
+        )
+        return normalized[0], {**normalized[1], **headers}, normalized[2]
 
     @staticmethod
     def _json(status: HTTPStatus, payload: Mapping[str, object]) -> ResponseTuple:

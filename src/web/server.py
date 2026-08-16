@@ -104,6 +104,44 @@ class AdminWebServer:
             '/internal/campaigns/{chat_id}/sessions/stop',
             self._api.stop_campaign_session,
         )
+        self._router.add(
+            'POST', '/internal/auth/registration-codes', self._api.create_registration_code
+        )
+        self._router.add(
+            'POST',
+            '/internal/campaigns/{chat_id}/admin-links',
+            self._api.create_admin_link,
+        )
+        self._router.add(
+            'PUT',
+            '/internal/campaigns/{chat_id}/master',
+            self._api.assign_campaign_master,
+        )
+        self._router.add(
+            'POST',
+            '/internal/campaigns/{chat_id}/players',
+            self._api.register_campaign_player,
+        )
+        self._router.add(
+            'GET',
+            '/internal/campaigns/{chat_id}/foundry-url',
+            self._api.get_foundry_url,
+        )
+        self._router.add(
+            'PUT',
+            '/internal/campaigns/{chat_id}/foundry-url',
+            self._api.set_foundry_url,
+        )
+        self._router.add(
+            'GET',
+            '/internal/campaigns/{chat_id}/web-url',
+            self._api.get_campaign_web_url,
+        )
+        self._router.add(
+            'PUT',
+            '/internal/campaigns/{chat_id}/web-url',
+            self._api.set_campaign_web_url,
+        )
         for method, path in PAGE_ROUTES:
             self._router.add(method, path, self._pages.dispatch)
 

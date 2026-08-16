@@ -50,13 +50,13 @@ class CoreClient:
 
     async def create_admin_link(self, chat_id: int, user_id: int, chat_title: str | None) -> str:
         payload = await self._request(
-            '/api/admin-link',
-            {'chat_id': chat_id, 'user_id': user_id, 'chat_title': chat_title or ''},
+            f'/internal/campaigns/{chat_id}/admin-links',
+            {'user_id': user_id, 'chat_title': chat_title or ''},
         )
         return self._string(payload, 'url')
 
     async def create_registration_code(self, user_id: int) -> str:
-        payload = await self._request('/api/auth/registration', {'user_id': user_id})
+        payload = await self._request('/internal/auth/registration-codes', {'user_id': user_id})
         return self._string(payload, 'code')
 
     async def get_game(self, chat_id: int) -> str:
@@ -92,7 +92,9 @@ class CoreClient:
         )
 
     async def get_game_url(self, chat_id: int) -> str | None:
-        payload = await self._request('/api/game-url', {'action': 'get', 'chat_id': chat_id})
+        payload = await self._request(
+            f'/internal/campaigns/{chat_id}/foundry-url', {}, method='GET'
+        )
         value = payload.get('url')
         if value is not None and not isinstance(value, str):
             raise CoreClientError('Core returned an invalid response')
@@ -100,11 +102,13 @@ class CoreClient:
 
     async def set_game_url(self, chat_id: int, foundry_url: str) -> None:
         await self._request(
-            '/api/game-url', {'action': 'set', 'chat_id': chat_id, 'foundry_url': foundry_url}
+            f'/internal/campaigns/{chat_id}/foundry-url',
+            {'foundry_url': foundry_url},
+            method='PUT',
         )
 
     async def get_web_url(self, chat_id: int) -> str | None:
-        payload = await self._request('/api/web-url', {'action': 'get', 'chat_id': chat_id})
+        payload = await self._request(f'/internal/campaigns/{chat_id}/web-url', {}, method='GET')
         value = payload.get('url')
         if value is not None and not isinstance(value, str):
             raise CoreClientError('Core returned an invalid response')
@@ -112,7 +116,7 @@ class CoreClient:
 
     async def set_web_url(self, chat_id: int, web_url: str) -> None:
         await self._request(
-            '/api/web-url', {'action': 'set', 'chat_id': chat_id, 'web_url': web_url}
+            f'/internal/campaigns/{chat_id}/web-url', {'web_url': web_url}, method='PUT'
         )
 
     async def start_session(
@@ -138,23 +142,20 @@ class CoreClient:
 
     async def assign_master(self, chat_id: int, user_id: int, chat_title: str | None) -> None:
         await self._request(
-            '/api/role',
+            f'/internal/campaigns/{chat_id}/master',
             {
-                'action': 'assign_master',
-                'chat_id': chat_id,
                 'user_id': user_id,
                 'chat_title': chat_title or '',
             },
+            method='PUT',
         )
 
     async def register_player(
         self, chat_id: int, user_id: int, name: str, chat_title: str | None
     ) -> PlayerRegistration:
         payload = await self._request(
-            '/api/role',
+            f'/internal/campaigns/{chat_id}/players',
             {
-                'action': 'register_player',
-                'chat_id': chat_id,
                 'user_id': user_id,
                 'name': name,
                 'chat_title': chat_title or '',

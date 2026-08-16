@@ -50,6 +50,9 @@
 - `API-001` (этап 2): расписание, привязка Telegram-объявления и переходы игровых сессий получили
   campaign-scoped `/internal/*` endpoints; соответствующие методы `CoreClient` переведены на них,
   а прежние `/api/game` и `/api/session` оставлены для старых клиентов.
+- `API-001` (этап 3): регистрационные коды, admin-links, роли кампании, Foundry URL и адрес
+  web-панели перенесены на operation-oriented `/internal/*`; весь `CoreClient` использует новый
+  контракт со стабильными кодами ошибок, legacy `/api/*` сохранён на compatibility window.
 - `WEB-ARCH-001` (этап 1): HTTP request/response, маршрутизация и trusted proxy/cookie middleware
   вынесены из `AdminWebServer` в отдельные модули с сохранением совместимости существующих handlers.
 - `WEB-ARCH-001` (этап 2): internal API endpoints сгруппированы в отдельном `InternalApi` и
