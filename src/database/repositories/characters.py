@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from typing import cast
 
 from database.connection import Database, Row
-from database.models import Character
+from domain import Character
 
 
 def _character(row: Row) -> Character:

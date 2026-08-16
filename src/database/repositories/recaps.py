@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from typing import cast
 
 from database.connection import Database, Row
-from database.models import RecapEntry
+from domain import RecapEntry
 
 
 def _recap(row: Row) -> RecapEntry:

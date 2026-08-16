@@ -1,6 +1,6 @@
 from os import getenv
 
-from database.models import Session
+from domain import Session
 from game.scheduling import game_timezone
 
 

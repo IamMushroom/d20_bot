@@ -2,8 +2,8 @@ from datetime import UTC, datetime
 from typing import cast
 
 from database.connection import Database, Row
-from database.models import Campaign, CampaignMembership
 from database.repositories.campaigns import _campaign
+from domain import Campaign, CampaignMembership
 
 
 def _membership(row: Row) -> CampaignMembership:

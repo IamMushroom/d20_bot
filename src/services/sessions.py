@@ -4,7 +4,6 @@ from datetime import datetime
 from enum import Enum, auto
 
 from database.connection import Database
-from database.models import Session
 from database.repositories import (
     ActiveSessionExistsError,
     CampaignRepository,
@@ -12,6 +11,7 @@ from database.repositories import (
     MembershipRepository,
     SessionRepository,
 )
+from domain import Session
 
 
 @dataclass(frozen=True, slots=True)

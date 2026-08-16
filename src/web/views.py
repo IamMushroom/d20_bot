@@ -3,7 +3,7 @@ from http import HTTPStatus
 
 from jinja2 import Environment, PackageLoader, StrictUndefined, select_autoescape
 
-from database.models import Campaign, Session
+from domain import Campaign, Session
 from game import ANNOUNCEMENT_TIMEZONES, game_message, game_timezone
 from services.campaigns import CampaignRoster
 from web.access import ActiveWebSession, AdminIdentity

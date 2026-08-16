@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from http import HTTPStatus
 
-from database.models import Campaign, Character, Session
+from domain import Campaign, Character, Session
 from services.campaigns import CampaignRoster
 from web.access import AdminIdentity
 from web.views import dashboard_response, page_response, settings_response

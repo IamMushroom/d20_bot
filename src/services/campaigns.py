@@ -2,8 +2,8 @@ from dataclasses import dataclass
 from enum import Enum, auto
 
 from database.connection import Database
-from database.models import Campaign, CampaignMembership, Character
 from database.repositories import CampaignRepository, CharacterRepository, MembershipRepository
+from domain import Campaign, CampaignMembership, Character
 
 
 class PlayerRegistrationStatus(Enum):

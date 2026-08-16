@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from typing import cast
 
 from database.connection import Database, Row
-from database.models import Session
+from domain import Session
 
 
 class ActiveSessionExistsError(Exception):
