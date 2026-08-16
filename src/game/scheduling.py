@@ -4,8 +4,6 @@ from os import getenv
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from database.models import Session
-
 ANNOUNCEMENT_TIMEZONES = (
     'Europe/Moscow',
     'Europe/Kaliningrad',
@@ -52,14 +50,3 @@ def parse_game_date(date_text: str, time_text: str, now: datetime) -> datetime:
 def valid_url(value: str) -> bool:
     parsed = urlparse(value)
     return parsed.scheme in {'http', 'https'} and bool(parsed.netloc)
-
-
-def game_message(session: Session, timezone_name: str | None = None) -> str:
-    assert session.scheduled_at is not None
-    assert session.foundry_url is not None
-    timezone_name = timezone_name or getenv('D20_BOT_GAME_TIMEZONE', 'Europe/Moscow')
-    local = session.scheduled_at.astimezone(game_timezone(timezone_name))
-    return (
-        f'🎲 Следующая игра: {local:%d.%m.%Y в %H:%M} ({timezone_name})\n'
-        f'🏰 Foundry: {session.foundry_url}'
-    )

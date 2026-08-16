@@ -40,6 +40,8 @@
 
 ### Changed
 
+- `ARCH-002`: общая логика расписания и форматирования анонсов вынесена в нейтральный пакет `game`;
+  web-слой больше не импортирует Telegram-команды или библиотеку Telegram.
 - `ARCH-001`: Core-зависимые Telegram-команды переведены на единственный путь через `CoreClient`;
   удалены локальные service lookup и legacy lifecycle-тесты, standalone-команды бросков и утилит сохранены.
 - `WEB-001`, `WEB-004`: HTML/CSS вынесены из HTTP routing в Jinja-шаблоны с autoescape

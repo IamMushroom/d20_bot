@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock
 from telegram.error import BadRequest
 
 import commands
-from commands.game_utils import parse_game_date, valid_url
 from core import CoreClientError, ScheduledGame
+from game import parse_game_date, valid_url
 
 
 def update():

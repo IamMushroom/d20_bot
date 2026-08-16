@@ -4,9 +4,9 @@ from telegram import Update
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
-from commands.game_utils import valid_url
 from commands.helpers import is_admin
 from core import CORE_CLIENT_KEY, CoreClient, CoreClientError
+from game import valid_url
 
 
 async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

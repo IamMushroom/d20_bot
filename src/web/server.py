@@ -18,7 +18,7 @@ from auth import (
     RateLimiter,
     UnknownTelegramUser,
 )
-from commands.game_utils import ANNOUNCEMENT_TIMEZONES, game_message, valid_url
+from game import ANNOUNCEMENT_TIMEZONES, game_message, valid_url
 from services import (
     CampaignService,
     OutboxService,

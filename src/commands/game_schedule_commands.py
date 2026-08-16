@@ -5,9 +5,9 @@ from telegram import Update
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
-from commands.game_utils import parse_game_date, valid_url
 from commands.helpers import is_admin
 from core import CORE_CLIENT_KEY, CoreClient, CoreClientError
+from game import parse_game_date, valid_url
 
 USAGE = '⚠️ Формат: /game ДД.ММ.ГГГГ ЧЧ:ММ [https://foundry.example]'
 
