@@ -45,7 +45,7 @@ def test_core_client_requests_registration_code(monkeypatch):
 def test_core_client_translates_transport_errors(monkeypatch, error, message):
     monkeypatch.setattr(client_module, 'urlopen', Mock(side_effect=error))
     with pytest.raises(CoreClientError, match=message):
-        CoreClient('http://core:8190', 'secret')._request_sync('/api/admin-link', {})
+        CoreClient('http://core:8190', 'secret')._request_sync('/internal/events', {})
 
 
 def test_core_client_rejects_invalid_response(monkeypatch):

@@ -201,7 +201,7 @@ def test_local_web_registration_and_login(tmp_path):
     assert login[0] == HTTPStatus.SEE_OTHER
 
 
-def test_local_web_auth_errors_and_registration_api(tmp_path):
+def test_local_web_auth_errors(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
         identities = SQLiteLocalIdentityProvider(database)
@@ -218,10 +218,6 @@ def test_local_web_auth_errors_and_registration_api(tmp_path):
             await server._route(
                 'POST', '/register', {}, b'code=bad&login=not+valid&password=long-password'
             ),
-            await server._route('POST', '/api/auth/registration', {}, b'user_id=7'),
-            await server._route('POST', '/api/auth/registration', headers, b'user_id=bad'),
-            await server._route('POST', '/api/auth/registration', headers, b'user_id=404'),
-            await server._route('POST', '/api/auth/registration', headers, b'user_id=7'),
         ]
         disabled = AdminWebServer(
             database, access, campaigns, sessions, bot, internal_token='secret'
@@ -230,7 +226,6 @@ def test_local_web_auth_errors_and_registration_api(tmp_path):
             [
                 await disabled._route('POST', '/login', {}, b'login=x&password=y'),
                 await disabled._route('POST', '/register', {}, b'code=x'),
-                await disabled._route('POST', '/api/auth/registration', headers, b'user_id=7'),
                 await disabled._route(
                     'POST', '/internal/auth/registration-codes', headers, b'user_id=7'
                 ),
@@ -245,11 +240,6 @@ def test_local_web_auth_errors_and_registration_api(tmp_path):
         HTTPStatus.OK,
         HTTPStatus.BAD_REQUEST,
         HTTPStatus.BAD_REQUEST,
-        HTTPStatus.UNAUTHORIZED,
-        HTTPStatus.BAD_REQUEST,
-        HTTPStatus.NOT_FOUND,
-        HTTPStatus.OK,
-        HTTPStatus.SERVICE_UNAVAILABLE,
         HTTPStatus.SERVICE_UNAVAILABLE,
         HTTPStatus.SERVICE_UNAVAILABLE,
         HTTPStatus.SERVICE_UNAVAILABLE,
@@ -284,8 +274,6 @@ def test_auth_endpoints_return_rate_limit_response(tmp_path):
                 b'code=ABCD&login=user&password=long-password',
                 '192.0.2.1',
             ),
-            await server._route('POST', '/api/auth/registration', headers, b'user_id=7'),
-            await server._route('POST', '/api/admin-link', headers, b'chat_id=-100&user_id=7'),
             await server._route('POST', '/internal/auth/registration-codes', headers, b'user_id=7'),
             await server._route(
                 'POST', '/internal/campaigns/-100/admin-links', headers, b'user_id=7'
@@ -297,10 +285,9 @@ def test_auth_endpoints_return_rate_limit_response(tmp_path):
     responses, limiter = asyncio.run(scenario())
     assert all(response[0] is HTTPStatus.TOO_MANY_REQUESTS for response in responses)
     assert all(response[1]['Retry-After'] == '42' for response in responses)
-    assert b'rate_limited' in responses[2][2] and b'rate_limited' in responses[3][2]
-    assert json.loads(responses[4][2])['error']['code'] == 'rate_limited'
-    assert json.loads(responses[5][2])['error']['code'] == 'rate_limited'
-    assert limiter.hit.await_count == 6
+    assert json.loads(responses[2][2])['error']['code'] == 'rate_limited'
+    assert json.loads(responses[3][2])['error']['code'] == 'rate_limited'
+    assert limiter.hit.await_count == 4
 
 
 def test_rate_limit_only_trusts_forwarded_ip_from_configured_proxy(tmp_path, monkeypatch):
@@ -406,7 +393,7 @@ def test_admin_command_reports_connected_core_error(caplog):
     assert bot.send_message.await_args.kwargs['chat_id'] == -100
     assert 'Core недоступен' in bot.send_message.await_args.kwargs['text']
     record = caplog.records[-1]
-    assert record.core_path == '/api/admin-link'
+    assert record.core_path == '/internal/campaigns/-100/admin-links'
     assert record.error_type == 'CoreClientError'
     assert record.error_message == 'unavailable'
 
@@ -1026,170 +1013,6 @@ def test_web_master_transfer_rejects_invalid_or_unregistered_target(tmp_path):
     assert missing[0] is HTTPStatus.CONFLICT
 
 
-def test_internal_api_issues_admin_link_for_master(tmp_path):
-    async def scenario():
-        database, campaigns, sessions, access, bot = await setup(tmp_path)
-        server = AdminWebServer(
-            database,
-            access,
-            campaigns,
-            sessions,
-            bot,
-            internal_token='core-secret',
-            web_base_url='https://d20.example',
-        )
-        unauthorized = await server._route('POST', '/api/admin-link', {}, b'chat_id=-100&user_id=7')
-        headers = {'authorization': 'Bearer core-secret'}
-        invalid = await server._route('POST', '/api/admin-link', headers, b'chat_id=nope')
-        forbidden = await server._route(
-            'POST', '/api/admin-link', headers, b'chat_id=-100&user_id=8'
-        )
-        allowed = await server._route(
-            'POST',
-            '/api/admin-link',
-            headers,
-            'chat_id=-100&user_id=7&chat_title=Кампания'.encode(),
-        )
-        url = json.loads(allowed[2])['url']
-        login = await server._route('GET', url.removeprefix('https://d20.example'), {}, b'')
-        await database.close()
-        return unauthorized, invalid, forbidden, allowed, login
-
-    unauthorized, invalid, forbidden, allowed, login = asyncio.run(scenario())
-    assert unauthorized[0] is HTTPStatus.UNAUTHORIZED
-    assert invalid[0] is HTTPStatus.BAD_REQUEST
-    assert forbidden[0] is HTTPStatus.FORBIDDEN
-    assert allowed[0] is HTTPStatus.OK
-    assert allowed[1]['Content-Type'].startswith('application/json')
-    assert login[0] is HTTPStatus.SEE_OTHER
-
-
-def test_internal_game_api(tmp_path, monkeypatch):
-    monkeypatch.setenv('D20_BOT_GAME_TIMEZONE', 'UTC')
-    monkeypatch.setenv('D20_BOT_FOUNDRY_URL', 'https://foundry.example/default')
-
-    async def scenario():
-        database, campaigns, sessions, access, bot = await setup(tmp_path)
-        server = AdminWebServer(database, access, campaigns, sessions, bot, internal_token='secret')
-        headers = {'authorization': 'Bearer secret'}
-        unauthorized = await server._route('POST', '/api/game', {}, b'action=get&chat_id=-100')
-        empty = await server._route('POST', '/api/game', headers, b'action=get&chat_id=-100')
-        invalid = await server._route('POST', '/api/game', headers, b'action=schedule&chat_id=x')
-        scheduled = await server._route(
-            'POST',
-            '/api/game',
-            headers,
-            b'action=schedule&chat_id=-100&scheduled_at=2026-07-20T19%3A00%3A00%2B00%3A00',
-        )
-        payload = json.loads(scheduled[2])
-        saved = await server._route(
-            'POST',
-            '/api/game',
-            headers,
-            f'action=set_announcement&session_id={payload["session_id"]}&message_id=99'.encode(),
-        )
-        shown = await server._route('POST', '/api/game', headers, b'action=get&chat_id=-100')
-        no_url = await server._route('POST', '/api/game-url', headers, b'action=get&chat_id=-1')
-        unauthorized_url = await server._route(
-            'POST', '/api/game-url', {}, b'action=get&chat_id=-1'
-        )
-        invalid_url = await server._route(
-            'POST', '/api/game-url', headers, b'action=set&chat_id=-100&foundry_url=bad'
-        )
-        invalid_game_action = await server._route('POST', '/api/game', headers, b'action=nope')
-        set_url = await server._route(
-            'POST',
-            '/api/game-url',
-            headers,
-            b'action=set&chat_id=-100&foundry_url=https%3A%2F%2Fchat.example',
-        )
-        got_url = await server._route('POST', '/api/game-url', headers, b'action=get&chat_id=-100')
-        bad_action = await server._route(
-            'POST', '/api/game-url', headers, b'action=nope&chat_id=-100'
-        )
-        planned = await sessions.get_planned(-100)
-        await database.close()
-        return (
-            unauthorized,
-            empty,
-            invalid,
-            scheduled,
-            saved,
-            shown,
-            no_url,
-            unauthorized_url,
-            invalid_url,
-            invalid_game_action,
-            set_url,
-            got_url,
-            bad_action,
-            planned,
-        )
-
-    results = asyncio.run(scenario())
-    assert results[0][0] is HTTPStatus.UNAUTHORIZED
-    assert results[1][0] is HTTPStatus.OK
-    assert results[2][0] is HTTPStatus.BAD_REQUEST
-    assert results[3][0] is HTTPStatus.OK
-    assert results[4][0] is HTTPStatus.OK
-    assert b'Foundry' in results[5][2]
-    assert json.loads(results[6][2])['url'] == 'https://foundry.example/default'
-    assert results[7][0] is HTTPStatus.UNAUTHORIZED
-    assert results[8][0] is HTTPStatus.BAD_REQUEST
-    assert results[9][0] is HTTPStatus.BAD_REQUEST
-    assert results[10][0] is HTTPStatus.OK
-    assert json.loads(results[11][2])['url'] == 'https://chat.example'
-    assert results[12][0] is HTTPStatus.BAD_REQUEST
-    assert results[13].message_id == 99
-
-
-def test_internal_session_api(tmp_path):
-    async def scenario():
-        database, campaigns, sessions, access, bot = await setup(tmp_path)
-        server = AdminWebServer(database, access, campaigns, sessions, bot, internal_token='secret')
-        headers = {'authorization': 'Bearer secret'}
-
-        async def call(body: bytes, authorized: bool = True):
-            return await server._route('POST', '/api/session', headers if authorized else {}, body)
-
-        results = [
-            await call(b'action=start&chat_id=-100&user_id=7', False),
-            await call(b'action=start&chat_id=x'),
-            await call(f'action=start&chat_id=-100&user_id=7&title={"x" * 101}'.encode()),
-            await call(b'action=start&chat_id=-100&user_id=8'),
-            await call(b'action=start&chat_id=-100&user_id=7&title=Tower'),
-            await call(b'action=start&chat_id=-100&user_id=7'),
-            await call(b'action=stop&chat_id=-100&user_id=8'),
-            await call(b'action=stop&chat_id=-100&user_id=7'),
-            await call(b'action=stop&chat_id=-100&user_id=7'),
-            await call(b'action=nope&chat_id=-100&user_id=7'),
-        ]
-        await database.close()
-        return results
-
-    results = asyncio.run(scenario())
-    assert [result[0] for result in results] == [
-        HTTPStatus.UNAUTHORIZED,
-        HTTPStatus.BAD_REQUEST,
-        HTTPStatus.BAD_REQUEST,
-        HTTPStatus.OK,
-        HTTPStatus.OK,
-        HTTPStatus.OK,
-        HTTPStatus.OK,
-        HTTPStatus.OK,
-        HTTPStatus.OK,
-        HTTPStatus.BAD_REQUEST,
-    ]
-    assert [json.loads(result[2]).get('status') for result in results[3:9]] == [
-        'forbidden',
-        'started',
-        'already_active',
-        'forbidden',
-        'stopped',
-        'no_active_session',
-    ]
-
-
 def test_operation_oriented_game_and_session_api(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
@@ -1324,89 +1147,6 @@ def test_operation_oriented_game_and_session_api(tmp_path):
     assert json.loads(results[20][2])['status'] == 'stopped'
     assert json.loads(results[21][2])['status'] == 'no_active_session'
     assert results[22] is None
-
-
-def test_internal_role_api(tmp_path):
-    async def scenario():
-        database, campaigns, sessions, access, bot = await setup(tmp_path)
-        server = AdminWebServer(database, access, campaigns, sessions, bot, internal_token='secret')
-        headers = {'authorization': 'Bearer secret'}
-
-        async def call(body: bytes, authorized: bool = True):
-            return await server._route('POST', '/api/role', headers if authorized else {}, body)
-
-        results = [
-            await call(b'action=assign_master&chat_id=-200&user_id=20', False),
-            await call(b'action=assign_master&chat_id=x'),
-            await call(b'action=assign_master&chat_id=-200&user_id=20&chat_title=New'),
-            await call(b'action=register_player&chat_id=-200&user_id=20&name=Hero'),
-            await call(b'action=register_player&chat_id=-200&user_id=21&name='),
-            await call(b'action=register_player&chat_id=-200&user_id=21&name=Hero'),
-            await call(b'action=nope&chat_id=-200&user_id=21'),
-        ]
-        roster = await campaigns.get_roster(-200)
-        await database.close()
-        return results, roster
-
-    results, roster = asyncio.run(scenario())
-    assert [result[0] for result in results] == [
-        HTTPStatus.UNAUTHORIZED,
-        HTTPStatus.BAD_REQUEST,
-        HTTPStatus.OK,
-        HTTPStatus.OK,
-        HTTPStatus.BAD_REQUEST,
-        HTTPStatus.OK,
-        HTTPStatus.BAD_REQUEST,
-    ]
-    assert json.loads(results[3][2])['status'] == 'master_conflict'
-    assert json.loads(results[5][2]) == {'status': 'registered', 'name': 'Hero'}
-    assert roster is not None
-    assert [(member.telegram_user_id, member.role) for member in roster.memberships] == [
-        (20, 'master'),
-        (21, 'player'),
-    ]
-
-
-def test_internal_web_url_api(tmp_path):
-    async def scenario():
-        database, campaigns, sessions, access, bot = await setup(tmp_path)
-        server = AdminWebServer(
-            database,
-            access,
-            campaigns,
-            sessions,
-            bot,
-            internal_token='secret',
-            web_base_url='https://default',
-        )
-        headers = {'authorization': 'Bearer secret'}
-        results = [
-            await server._route('POST', '/api/web-url', {}, b'action=get&chat_id=-100'),
-            await server._route('POST', '/api/web-url', headers, b'action=get&chat_id=x'),
-            await server._route('POST', '/api/web-url', headers, b'action=get&chat_id=-100'),
-            await server._route(
-                'POST', '/api/web-url', headers, b'action=set&chat_id=-100&web_url=bad'
-            ),
-            await server._route(
-                'POST',
-                '/api/web-url',
-                headers,
-                b'action=set&chat_id=-100&web_url=https%3A%2F%2Fd20.example%2F',
-            ),
-            await server._route('POST', '/api/web-url', headers, b'action=get&chat_id=-100'),
-            await server._route('POST', '/api/web-url', headers, b'action=nope&chat_id=-100'),
-        ]
-        await database.close()
-        return results
-
-    results = asyncio.run(scenario())
-    assert results[0][0] is HTTPStatus.UNAUTHORIZED
-    assert results[1][0] is HTTPStatus.BAD_REQUEST
-    assert json.loads(results[2][2])['url'] == 'https://default'
-    assert results[3][0] is HTTPStatus.BAD_REQUEST
-    assert results[4][0] is HTTPStatus.OK
-    assert json.loads(results[5][2])['url'] == 'https://d20.example'
-    assert results[6][0] is HTTPStatus.BAD_REQUEST
 
 
 def test_operation_oriented_auth_role_and_config_api(tmp_path):
@@ -1553,6 +1293,19 @@ def test_operation_oriented_auth_role_and_config_api(tmp_path):
     )
     assert json.loads(extras[9][2])['error']['code'] == 'invalid_campaign_id'
     assert json.loads(extras[10][2])['error']['code'] == 'invalid_campaign_id'
+
+
+def test_deprecated_api_routes_are_not_registered(tmp_path):
+    async def scenario():
+        database, campaigns, sessions, access, outbox = await setup(tmp_path)
+        server = AdminWebServer(
+            database, access, campaigns, sessions, outbox, internal_token='secret'
+        )
+        paths = {path for _method, path in server._router._routes}
+        await database.close()
+        return paths
+
+    assert not any(path == '/api' or path.startswith('/api/') for path in asyncio.run(scenario()))
 
 
 def test_web_server_start_read_request_and_close(tmp_path):

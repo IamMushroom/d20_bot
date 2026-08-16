@@ -8,7 +8,7 @@ from importlib.resources import files
 from auth import IdentityProvider, RateLimiter
 from services import CampaignService, GameWorkflowService, OutboxService, SessionService
 from web.access import AdminAccessService
-from web.api import AuthApi, CampaignsApi, EventsApi, GamesApi, LegacyApi, SessionsApi
+from web.api import AuthApi, CampaignsApi, EventsApi, GamesApi, SessionsApi
 from web.http import Request, Response, ResponseTuple, read_request, serialize_response
 from web.middleware import trusted_proxy
 from web.pages import PageHandlers
@@ -32,16 +32,6 @@ class AdminWebServer:
         web_base_url: str = '',
     ) -> None:
         self._server: asyncio.Server | None = None
-        legacy = LegacyApi(
-            access,
-            campaigns,
-            sessions,
-            outbox,
-            identities,
-            rate_limiter,
-            internal_token,
-            web_base_url,
-        )
         auth_api = AuthApi(identities, rate_limiter, internal_token)
         campaigns_api = CampaignsApi(
             access, campaigns, sessions, rate_limiter, internal_token, web_base_url
@@ -60,14 +50,6 @@ class AdminWebServer:
         self._router = Router()
         self._router.add('GET', '/health', self._health_route)
         self._router.add('GET', '/static/app.js', self._javascript_route)
-        self._router.add('POST', '/api/admin-link', legacy.admin_link)
-        self._router.add('POST', '/api/auth/registration', legacy.registration)
-        self._router.add('POST', '/api/game', legacy.game)
-        self._router.add('POST', '/api/game-url', legacy.game_url)
-        self._router.add('POST', '/api/session', legacy.session)
-        self._router.add('POST', '/api/role', legacy.role)
-        self._router.add('POST', '/api/web-url', legacy.web_url)
-        self._router.add('POST', '/api/events', legacy.events)
         self._router.add('GET', '/internal/events', events_api.list_events)
         self._router.add('POST', '/internal/events/{event_id}/ack', events_api.acknowledge_event)
         self._router.add('GET', '/internal/campaigns/{chat_id}/game', games_api.get_game)

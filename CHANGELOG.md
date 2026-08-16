@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+- `ARCH-011`: удалены deprecated action-based Core API и compatibility controller; `/internal/*`
+  остаётся единственным Bot/Core контрактом, а diagnostic path команды `/admin` приведён к
+  фактически вызываемому endpoint.
+- Standalone и Connected закреплены как равноправные поддерживаемые режимы: Core integration
+  остаётся optional capability бота и не требуется для Core-independent команд.
+
 - Архитектурные тесты усилены запретами `repositories → services/presentation`,
   `services → web/commands/telegram` и взаимных импортов между `web/api` и `web/pages`.
 
@@ -63,7 +69,7 @@
   `Router`; вложенный `PageHandlers.dispatch()` удалён, а общие session, CSRF и campaign access
   проверки сохранены в переиспользуемых helpers.
 - `ARCH-006`: внутренний HTTP API разделён по capabilities аутентификации, кампаний, игр,
-  сессий и outbox; deprecated action-based `/api/*` физически изолирован в compatibility module,
+  сессий и outbox; deprecated action-based контракт был физически изолирован перед удалением,
   а общая авторизация, валидация path и error serialization больше не дублируются.
 - `ARCH-005`: операции назначения мастера, регистрации игрока и передачи роли мастера теперь
   атомарны; failure-injection тесты подтверждают rollback campaign, membership, user и character
@@ -74,13 +80,12 @@
   `GameWorkflowService`; изменение сессии и связанное outbox-событие теперь фиксируются атомарно.
 - `API-001` (этап 1): добавлены operation-oriented endpoints `GET /internal/events` и
   `POST /internal/events/{event_id}/ack`, path-параметры Router и структурированные ошибки со
-  стабильным `error.code`; `CoreClient` переведён на новый outbox API, legacy `/api/events` сохранён.
+  стабильным `error.code`; `CoreClient` переведён на новый outbox API.
 - `API-001` (этап 2): расписание, привязка Telegram-объявления и переходы игровых сессий получили
-  campaign-scoped `/internal/*` endpoints; соответствующие методы `CoreClient` переведены на них,
-  а прежние `/api/game` и `/api/session` оставлены для старых клиентов.
+  campaign-scoped `/internal/*` endpoints; соответствующие методы `CoreClient` переведены на них.
 - `API-001` (этап 3): регистрационные коды, admin-links, роли кампании, Foundry URL и адрес
   web-панели перенесены на operation-oriented `/internal/*`; весь `CoreClient` использует новый
-  контракт со стабильными кодами ошибок, legacy `/api/*` сохранён на compatibility window.
+  контракт со стабильными кодами ошибок.
 - `WEB-ARCH-001` (этап 1): HTTP request/response, маршрутизация и trusted proxy/cookie middleware
   вынесены из `AdminWebServer` в отдельные модули с сохранением совместимости существующих handlers.
 - `WEB-ARCH-001` (этап 2): internal API endpoints сгруппированы в отдельном `InternalApi` и

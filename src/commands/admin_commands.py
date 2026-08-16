@@ -32,7 +32,7 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             extra={
                 'error_type': type(error).__name__,
                 'error_message': str(error),
-                'core_path': '/api/admin-link',
+                'core_path': f'/internal/campaigns/{chat.id}/admin-links',
             },
         )
         await context.bot.send_message(

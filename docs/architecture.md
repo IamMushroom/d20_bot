@@ -64,6 +64,13 @@ D20_BOT_CORE_TOKEN=<shared-secret>
 Если Core временно недоступен, броски продолжают работать, а удалённая команда возвращает
 понятное сообщение об ошибке.
 
+Это обязательный архитектурный invariant: Telegram Bot намеренно поддерживает Standalone и
+Connected режимы. Standalone предоставляет Core-independent Telegram-функции без Core и
+постоянного campaign storage. Core integration является optional capability бота; никакое
+архитектурное изменение не должно делать Core обязательной зависимостью `/roll`, `/timer` и
+других Core-independent команд. Campaign resolution выполняется только внутри connected
+capabilities, а event consumer не запускается без настроенного Core.
+
 ## Core
 
 При старте Core выполняет следующие действия:
@@ -109,18 +116,7 @@ application-транзакции; repositories изменяют только п�
 
 ## Внутренний API
 
-Legacy action-based API физически изолирован в `web/api/legacy.py`, помечен deprecated и пока
-предоставляет методы для совместимости:
-
-- `POST /api/admin-link` — одноразовая ссылка мастера;
-- `POST /api/game` — чтение и изменение расписания, сохранение ID объявления;
-- `POST /api/game-url` — чтение и изменение адреса Foundry по умолчанию.
-- `POST /api/session` — запуск и завершение игровой сессии.
-- `POST /api/role` — назначение мастера и регистрация персонажа;
-- `POST /api/web-url` — адрес панели для конкретного чата.
-- `POST /api/events` — получение и подтверждение событий outbox.
-
-Основной operation-oriented API предоставляет endpoints:
+Core предоставляет единственный operation-oriented API:
 
 - `GET /internal/events` — список ожидающих событий;
 - `POST /internal/events/{event_id}/ack` — подтверждение отдельного события.
@@ -148,9 +144,7 @@ Legacy action-based API физически изолирован в `web/api/lega
 ```
 
 Клиенты принимают решения по стабильному `code`, а `message` предназначен для диагностики.
-Все методы `CoreClient` используют `/internal/*`. Старые `/api/*` endpoints пока сохраняются для
-совместимости уже запущенных экземпляров Bot и должны удаляться только отдельным изменением после
-явно выбранного compatibility window.
+Все методы `CoreClient` используют `/internal/*`; deprecated action-based compatibility API удалён.
 
 Пример запроса ссылки:
 

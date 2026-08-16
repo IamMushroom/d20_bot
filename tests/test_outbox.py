@@ -319,46 +319,22 @@ def test_internal_events_api(tmp_path):
             outbox,
             internal_token='secret',
         )
-        event_id = await outbox.publish('session_stopped', {'chat_id': 1, 'number': 2})
         headers = {'authorization': 'Bearer secret'}
-        unauthorized = await server._route('POST', '/api/events', {}, b'action=get')
-        pending = await server._route('POST', '/api/events', headers, b'action=get')
-        invalid = await server._route('POST', '/api/events', headers, b'action=ack&event_id=x')
-        acknowledged = await server._route(
-            'POST', '/api/events', headers, f'action=ack&event_id={event_id}'.encode()
-        )
-        empty = await server._route('POST', '/api/events', headers, b'action=get')
-        bad_action = await server._route('POST', '/api/events', headers, b'action=nope')
-        new_event_id = await outbox.publish('session_stopped', {'chat_id': 2, 'number': 3})
-        new_unauthorized = await server._route('GET', '/internal/events', {}, b'')
-        new_pending = await server._route('GET', '/internal/events', headers, b'')
-        invalid_new_ack = await server._route('POST', '/internal/events/nope/ack', headers, b'')
-        new_ack = await server._route('POST', f'/internal/events/{new_event_id}/ack', headers, b'')
+        event_id = await outbox.publish('session_stopped', {'chat_id': 2, 'number': 3})
+        unauthorized = await server._route('GET', '/internal/events', {}, b'')
+        pending = await server._route('GET', '/internal/events', headers, b'')
+        invalid_ack = await server._route('POST', '/internal/events/nope/ack', headers, b'')
+        acknowledged = await server._route('POST', f'/internal/events/{event_id}/ack', headers, b'')
+        empty = await server._route('GET', '/internal/events', headers, b'')
         await database.close()
-        return (
-            unauthorized,
-            pending,
-            invalid,
-            acknowledged,
-            empty,
-            bad_action,
-            new_unauthorized,
-            new_pending,
-            invalid_new_ack,
-            new_ack,
-        )
+        return unauthorized, pending, invalid_ack, acknowledged, empty
 
     results = asyncio.run(scenario())
-    assert results[0][0] is HTTPStatus.UNAUTHORIZED
+    assert json.loads(results[0][2])['error']['code'] == 'unauthorized'
     assert json.loads(results[1][2])['events'][0]['type'] == 'session_stopped'
-    assert results[2][0] is HTTPStatus.BAD_REQUEST
+    assert json.loads(results[2][2])['error']['code'] == 'invalid_event_id'
     assert results[3][0] is HTTPStatus.OK
     assert json.loads(results[4][2])['events'] == []
-    assert results[5][0] is HTTPStatus.BAD_REQUEST
-    assert json.loads(results[6][2])['error']['code'] == 'unauthorized'
-    assert json.loads(results[7][2])['events'][0]['id'] > 0
-    assert json.loads(results[8][2])['error']['code'] == 'invalid_event_id'
-    assert results[9][0] is HTTPStatus.OK
 
 
 def test_event_poller_processes_batch(monkeypatch):
