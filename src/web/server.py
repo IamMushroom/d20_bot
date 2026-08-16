@@ -6,7 +6,6 @@ from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 from importlib.resources import files
-from ipaddress import ip_address, ip_network
 from os import getenv
 from urllib.parse import parse_qs, urlsplit
 
@@ -28,6 +27,9 @@ from services import (
     SessionStopStatus,
 )
 from web.access import AdminAccessService, AdminIdentity
+from web.http import Request, Response, read_request, serialize_response
+from web.middleware import client_ip, cookie, session_cookie, trusted_proxy
+from web.router import Router
 from web.views import (
     campaigns_response,
     dashboard_response,
@@ -38,7 +40,6 @@ from web.views import (
     settings_response,
 )
 
-MAX_REQUEST_SIZE = 16 * 1024
 APP_JS = files('web').joinpath('static/app.js').read_bytes()
 
 
@@ -63,6 +64,17 @@ class AdminWebServer:
         self._internal_token = internal_token
         self._web_base_url = web_base_url
         self._server: asyncio.Server | None = None
+        self._router = Router()
+        self._router.add('GET', '/health', self._health_route)
+        self._router.add('GET', '/static/app.js', self._javascript_route)
+        self._router.add('POST', '/api/admin-link', self._admin_link_route)
+        self._router.add('POST', '/api/auth/registration', self._registration_route)
+        self._router.add('POST', '/api/game', self._game_route)
+        self._router.add('POST', '/api/game-url', self._game_url_route)
+        self._router.add('POST', '/api/session', self._session_route)
+        self._router.add('POST', '/api/role', self._role_route)
+        self._router.add('POST', '/api/web-url', self._web_url_route)
+        self._router.add('POST', '/api/events', self._events_route)
 
     async def start(self, host: str, port: int) -> None:
         self._server = await asyncio.start_server(self._handle, host, port)
@@ -82,51 +94,30 @@ class AdminWebServer:
 
     async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
-            method, target, headers, body = await self._read_request(reader)
             peer = writer.get_extra_info('peername')
             remote_host = str(peer[0]) if isinstance(peer, tuple) and peer else None
-            status, response_headers, content = await self._route(
-                method, target, headers, body, remote_host
+            request = await read_request(reader, remote_host)
+            response = Response.from_tuple(
+                await self._route(
+                    request.method,
+                    request.target,
+                    request.headers,
+                    request.body,
+                    request.remote_host,
+                )
             )
         except ValueError, UnicodeError:
-            status, response_headers, content = HTTPStatus.BAD_REQUEST, {}, b'Bad request'
+            response = Response(HTTPStatus.BAD_REQUEST, body=b'Bad request')
         except Exception:
             logging.exception('Admin web request failed')
-            status, response_headers, content = HTTPStatus.INTERNAL_SERVER_ERROR, {}, b'Error'
-        response_headers = {
-            'Content-Type': 'text/html; charset=utf-8',
-            'Content-Length': str(len(content)),
-            'Connection': 'close',
-            'X-Content-Type-Options': 'nosniff',
-            'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'; form-action 'self'",
-            **response_headers,
-        }
-        head = f'HTTP/1.1 {status.value} {status.phrase}\r\n' + ''.join(
-            f'{name}: {value}\r\n' for name, value in response_headers.items()
-        )
-        writer.write(head.encode() + b'\r\n' + content)
+            response = Response(HTTPStatus.INTERNAL_SERVER_ERROR, body=b'Error')
+        writer.write(serialize_response(response))
         await writer.drain()
         writer.close()
         await writer.wait_closed()
 
-    async def _read_request(
-        self, reader: asyncio.StreamReader
-    ) -> tuple[str, str, dict[str, str], bytes]:
-        raw_head = await reader.readuntil(b'\r\n\r\n')
-        if len(raw_head) > MAX_REQUEST_SIZE:
-            raise ValueError('request too large')
-        lines = raw_head.decode('ascii').split('\r\n')
-        method, target, _version = lines[0].split(' ', 2)
-        headers = {
-            name.lower(): value.strip()
-            for line in lines[1:]
-            if line
-            for name, value in [line.split(':', 1)]
-        }
-        length = int(headers.get('content-length', '0'))
-        if length < 0 or length > MAX_REQUEST_SIZE:
-            raise ValueError('request too large')
-        return method, target, headers, await reader.readexactly(length)
+    async def _read_request(self, reader: asyncio.StreamReader) -> Request:
+        return await read_request(reader)
 
     async def _route(
         self,
@@ -136,34 +127,11 @@ class AdminWebServer:
         body: bytes,
         remote_host: str | None = None,
     ) -> tuple[HTTPStatus, dict[str, str], bytes]:
+        request = Request(method, target, headers, body, remote_host)
+        routed = await self._router.dispatch(request)
+        if routed is not None:
+            return routed
         url = urlsplit(target)
-        if method == 'GET' and url.path == '/health':
-            return self._json(HTTPStatus.OK, {'status': 'ok'})
-        if method == 'GET' and url.path == '/static/app.js':
-            return (
-                HTTPStatus.OK,
-                {
-                    'Content-Type': 'text/javascript; charset=utf-8',
-                    'Cache-Control': 'public, max-age=3600',
-                },
-                APP_JS,
-            )
-        if method == 'POST' and url.path == '/api/admin-link':
-            return await self._admin_link(headers, parse_qs(body.decode()))
-        if method == 'POST' and url.path == '/api/auth/registration':
-            return await self._registration_api(headers, parse_qs(body.decode()))
-        if method == 'POST' and url.path == '/api/game':
-            return await self._game_api(headers, parse_qs(body.decode()))
-        if method == 'POST' and url.path == '/api/game-url':
-            return await self._game_url_api(headers, parse_qs(body.decode()))
-        if method == 'POST' and url.path == '/api/session':
-            return await self._session_api(headers, parse_qs(body.decode()))
-        if method == 'POST' and url.path == '/api/role':
-            return await self._role_api(headers, parse_qs(body.decode()))
-        if method == 'POST' and url.path == '/api/web-url':
-            return await self._web_url_api(headers, parse_qs(body.decode()))
-        if method == 'POST' and url.path == '/api/events':
-            return await self._events_api(headers, parse_qs(body.decode()))
         if method == 'GET' and url.path == '/login' and url.query:
             token = parse_qs(url.query).get('token', [''])[0]
             session_id = await self._access.consume_login(token)
@@ -327,6 +295,43 @@ class AdminWebServer:
             return await self._transfer_master(selected_identity, form)
         return page_response(HTTPStatus.NOT_FOUND, 'Страница не найдена.')
 
+    async def _health_route(self, _request: Request):
+        return self._json(HTTPStatus.OK, {'status': 'ok'})
+
+    async def _javascript_route(self, _request: Request):
+        return (
+            HTTPStatus.OK,
+            {
+                'Content-Type': 'text/javascript; charset=utf-8',
+                'Cache-Control': 'public, max-age=3600',
+            },
+            APP_JS,
+        )
+
+    async def _admin_link_route(self, request: Request):
+        return await self._admin_link(request.headers, request.form)
+
+    async def _registration_route(self, request: Request):
+        return await self._registration_api(request.headers, request.form)
+
+    async def _game_route(self, request: Request):
+        return await self._game_api(request.headers, request.form)
+
+    async def _game_url_route(self, request: Request):
+        return await self._game_url_api(request.headers, request.form)
+
+    async def _session_route(self, request: Request):
+        return await self._session_api(request.headers, request.form)
+
+    async def _role_route(self, request: Request):
+        return await self._role_api(request.headers, request.form)
+
+    async def _web_url_route(self, request: Request):
+        return await self._web_url_api(request.headers, request.form)
+
+    async def _events_route(self, request: Request):
+        return await self._events_api(request.headers, request.form)
+
     async def _local_session(
         self, user_id: int, headers: Mapping[str, str], remote_host: str | None
     ) -> tuple[HTTPStatus, dict[str, str], bytes]:
@@ -347,16 +352,7 @@ class AdminWebServer:
     def _session_cookie(
         self, session_id: str, headers: Mapping[str, str], remote_host: str | None
     ) -> str:
-        cookie = f'd20_admin={session_id}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800'
-        secure_mode = getenv('D20_BOT_WEB_SECURE_COOKIE', 'auto').lower()
-        forwarded_protocol = (
-            headers.get('x-forwarded-proto', 'http').split(',', 1)[0].strip().lower()
-            if self._trusted_proxy(remote_host)
-            else 'http'
-        )
-        if secure_mode == 'true' or (secure_mode == 'auto' and forwarded_protocol == 'https'):
-            cookie += '; Secure'
-        return cookie
+        return session_cookie(session_id, headers, remote_host)
 
     async def _registration_api(
         self, headers: Mapping[str, str], form: Mapping[str, list[str]]
@@ -608,13 +604,7 @@ class AdminWebServer:
         )
 
     def _client_ip(self, headers: Mapping[str, str], remote_host: str | None) -> str:
-        candidate = remote_host or 'unknown'
-        if self._trusted_proxy(remote_host):
-            candidate = headers.get('x-forwarded-for', '').split(',', 1)[0].strip() or candidate
-        try:
-            return str(ip_address(candidate))
-        except ValueError:
-            return remote_host or 'unknown'
+        return client_ip(headers, remote_host)
 
     async def _rate_limit(
         self,
@@ -854,33 +844,11 @@ class AdminWebServer:
 
     @staticmethod
     def _trusted_proxy(remote_host: str | None) -> bool:
-        if remote_host is None:
-            return False
-        try:
-            address = ip_address(remote_host)
-        except ValueError:
-            return False
-        for value in getenv('D20_BOT_WEB_TRUSTED_PROXIES', '').split(','):
-            value = value.strip()
-            if not value:
-                continue
-            try:
-                if address in ip_network(value, strict=False):
-                    return True
-            except ValueError:
-                logging.warning(
-                    'Invalid trusted proxy network', extra={'trusted_proxy_network': value}
-                )
-        return False
+        return trusted_proxy(remote_host)
 
     @staticmethod
     def _cookie(headers: Mapping[str, str], name: str) -> str | None:
-        cookies = headers.get('cookie', '').split(';')
-        for cookie in cookies:
-            key, separator, value = cookie.strip().partition('=')
-            if separator and key == name:
-                return value
-        return None
+        return cookie(headers, name)
 
     @staticmethod
     def _json(

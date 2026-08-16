@@ -40,6 +40,8 @@
 
 ### Changed
 
+- `WEB-ARCH-001` (этап 1): HTTP request/response, маршрутизация и trusted proxy/cookie middleware
+  вынесены из `AdminWebServer` в отдельные модули с сохранением совместимости существующих handlers.
 - `ARCH-004`: добавлены AST-тесты архитектурных границ между web, Telegram-командами, domain,
   repositories и database owner; запрещённые импорты теперь приводят к падению test suite.
 - `ARCH-003`: общие модели кампаний, пользователей, членства, персонажей, сессий и рекапов
