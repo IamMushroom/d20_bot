@@ -571,6 +571,18 @@ def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
     results[13].publish.assert_awaited_once()
 
 
+def test_web_known_route_rejects_unsupported_method(tmp_path):
+    async def scenario():
+        database, campaigns, sessions, access, bot = await setup(tmp_path)
+        server = AdminWebServer(access, campaigns, sessions, bot)
+        response = await server._route('DELETE', '/health', {}, b'')
+        await database.close()
+        return response
+
+    response = asyncio.run(scenario())
+    assert response[0] is HTTPStatus.METHOD_NOT_ALLOWED
+
+
 def test_web_campaign_settings(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
