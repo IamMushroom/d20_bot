@@ -1,4 +1,3 @@
-import asyncio
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum, auto
@@ -47,7 +46,6 @@ class SessionStop:
 
 class SessionService:
     def __init__(self, database: Database):
-        self._lifecycle_lock = asyncio.Lock()
         self._campaigns = CampaignRepository(database)
         self._sessions = SessionRepository(database)
         self._configs = GameConfigRepository(database)
@@ -107,12 +105,11 @@ class SessionService:
         campaign = await self._campaigns.get_by_chat_id(chat_id)
         if campaign is None or await self._memberships.get_role(campaign.id, user_id) != 'master':
             return SessionStart(SessionStartStatus.FORBIDDEN)
-        async with self._lifecycle_lock:
-            planned = await self._sessions.get_planned(campaign.id)
-            try:
-                session = await self._sessions.start(campaign.id, title)
-            except ActiveSessionExistsError:
-                return SessionStart(SessionStartStatus.ALREADY_ACTIVE)
+        planned = await self._sessions.get_planned(campaign.id)
+        try:
+            session = await self._sessions.start(campaign.id, title)
+        except ActiveSessionExistsError:
+            return SessionStart(SessionStartStatus.ALREADY_ACTIVE)
         return SessionStart(
             status=SessionStartStatus.STARTED,
             session=session,
@@ -123,10 +120,10 @@ class SessionService:
         campaign = await self._campaigns.get_by_chat_id(chat_id)
         if campaign is None or await self._memberships.get_role(campaign.id, user_id) != 'master':
             return SessionStop(SessionStopStatus.FORBIDDEN)
-        async with self._lifecycle_lock:
-            active = await self._sessions.get_active(campaign.id)
-            if active is None:
-                return SessionStop(SessionStopStatus.NO_ACTIVE_SESSION)
-            session = await self._sessions.finish(active.id)
-            assert session is not None
+        active = await self._sessions.get_active(campaign.id)
+        if active is None:
+            return SessionStop(SessionStopStatus.NO_ACTIVE_SESSION)
+        session = await self._sessions.finish(active.id)
+        if session is None:
+            return SessionStop(SessionStopStatus.NO_ACTIVE_SESSION)
         return SessionStop(SessionStopStatus.STOPPED, session)

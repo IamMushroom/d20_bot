@@ -41,6 +41,7 @@ class CoreRuntime:
             identities = SQLiteLocalIdentityProvider(database)
             rate_limiter = SQLiteRateLimiter(database)
             web_server = AdminWebServer(
+                database,
                 access,
                 campaigns,
                 sessions,

@@ -142,7 +142,7 @@ def test_local_web_registration_and_login(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
         identities = SQLiteLocalIdentityProvider(database)
-        server = AdminWebServer(access, campaigns, sessions, bot, identities)
+        server = AdminWebServer(database, access, campaigns, sessions, bot, identities)
         code = await identities.issue_registration_code(7)
         registration = await server._route(
             'POST',
@@ -174,7 +174,7 @@ def test_local_web_auth_errors_and_registration_api(tmp_path):
         database, campaigns, sessions, access, bot = await setup(tmp_path)
         identities = SQLiteLocalIdentityProvider(database)
         server = AdminWebServer(
-            access, campaigns, sessions, bot, identities, internal_token='secret'
+            database, access, campaigns, sessions, bot, identities, internal_token='secret'
         )
         headers = {'authorization': 'Bearer secret'}
         pages = [
@@ -191,7 +191,9 @@ def test_local_web_auth_errors_and_registration_api(tmp_path):
             await server._route('POST', '/api/auth/registration', headers, b'user_id=404'),
             await server._route('POST', '/api/auth/registration', headers, b'user_id=7'),
         ]
-        disabled = AdminWebServer(access, campaigns, sessions, bot, internal_token='secret')
+        disabled = AdminWebServer(
+            database, access, campaigns, sessions, bot, internal_token='secret'
+        )
         pages.extend(
             [
                 await disabled._route('POST', '/login', {}, b'login=x&password=y'),
@@ -224,6 +226,7 @@ def test_auth_endpoints_return_rate_limit_response(tmp_path):
         identities = SQLiteLocalIdentityProvider(database)
         limiter = SimpleNamespace(hit=AsyncMock(return_value=RateLimitResult(False, 42)))
         server = AdminWebServer(
+            database,
             access,
             campaigns,
             sessions,
@@ -263,7 +266,7 @@ def test_rate_limit_only_trusts_forwarded_ip_from_configured_proxy(tmp_path, mon
         database, campaigns, sessions, access, bot = await setup(tmp_path)
         identities = SQLiteLocalIdentityProvider(database)
         limiter = SimpleNamespace(hit=AsyncMock(return_value=RateLimitResult(False, 1)))
-        server = AdminWebServer(access, campaigns, sessions, bot, identities, limiter)
+        server = AdminWebServer(database, access, campaigns, sessions, bot, identities, limiter)
         headers = {'x-forwarded-for': '198.51.100.10, 127.0.0.1'}
         await server._route('POST', '/login', headers, b'login=x&password=y', '127.0.0.1')
         trusted_key = limiter.hit.await_args.kwargs if limiter.hit.await_args.kwargs else None
@@ -477,7 +480,7 @@ def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
 
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
-        server = AdminWebServer(access, campaigns, sessions, bot)
+        server = AdminWebServer(database, access, campaigns, sessions, bot)
         await campaigns.register_player(-100, 8, '<Tilly>')
         identity = AdminIdentity(-100, 7, 'Campaign')
         token = await access.create_login(identity)
@@ -574,7 +577,7 @@ def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
 def test_web_known_route_rejects_unsupported_method(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
-        server = AdminWebServer(access, campaigns, sessions, bot)
+        server = AdminWebServer(database, access, campaigns, sessions, bot)
         response = await server._route('DELETE', '/health', {}, b'')
         await database.close()
         return response
@@ -586,7 +589,7 @@ def test_web_known_route_rejects_unsupported_method(tmp_path):
 def test_web_campaign_settings(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
-        server = AdminWebServer(access, campaigns, sessions, bot)
+        server = AdminWebServer(database, access, campaigns, sessions, bot)
         token = await access.create_login(AdminIdentity(-100, 7, 'Campaign'))
         login = await server._route('GET', f'/login?token={token}', {}, b'')
         headers = {'cookie': login[1]['Set-Cookie'].split(';', 1)[0]}
@@ -634,7 +637,7 @@ def test_web_campaign_settings(tmp_path):
 def test_web_rejects_invalid_csrf_and_logs_out(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
-        server = AdminWebServer(access, campaigns, sessions, bot)
+        server = AdminWebServer(database, access, campaigns, sessions, bot)
         token = await access.create_login(AdminIdentity(-100, 7, 'Campaign'))
         login = await server._route('GET', f'/login?token={token}', {}, b'')
         headers = {'cookie': login[1]['Set-Cookie'].split(';', 1)[0]}
@@ -655,7 +658,7 @@ def test_web_rejects_invalid_csrf_and_logs_out(tmp_path):
 def test_web_lists_and_revokes_active_sessions(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
-        server = AdminWebServer(access, campaigns, sessions, bot)
+        server = AdminWebServer(database, access, campaigns, sessions, bot)
         identity = AdminIdentity(-100, 7, 'Campaign')
 
         first_token = await access.create_login(identity)
@@ -693,7 +696,7 @@ def test_web_lists_and_revokes_active_sessions(tmp_path):
 def test_expired_login_and_revoked_session_cannot_be_used(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
-        server = AdminWebServer(access, campaigns, sessions, bot)
+        server = AdminWebServer(database, access, campaigns, sessions, bot)
         identity = AdminIdentity(-100, 7, 'Campaign')
 
         expired_token = await access.create_login(identity)
@@ -722,7 +725,7 @@ def test_web_user_can_switch_between_campaign_roles(tmp_path):
         database, campaigns, sessions, access, bot = await setup(tmp_path)
         await campaigns.assign_master(-200, 8, 'Second')
         await campaigns.register_player(-200, 7, 'Alice')
-        server = AdminWebServer(access, campaigns, sessions, bot)
+        server = AdminWebServer(database, access, campaigns, sessions, bot)
         token = await access.create_login(AdminIdentity(-100, 7, 'First'))
         login = await server._route('GET', f'/login?token={token}', {}, b'')
         headers = {'cookie': login[1]['Set-Cookie'].split(';', 1)[0]}
@@ -781,7 +784,7 @@ def test_master_manages_campaign_players_from_web(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
         await campaigns.register_player(-100, 8, 'Tilly')
-        server = AdminWebServer(access, campaigns, sessions, bot)
+        server = AdminWebServer(database, access, campaigns, sessions, bot)
         token = await access.create_login(AdminIdentity(-100, 7, 'Campaign'))
         login = await server._route('GET', f'/login?token={token}', {}, b'')
         headers = {'cookie': login[1]['Set-Cookie'].split(';', 1)[0]}
@@ -844,7 +847,7 @@ def test_master_manages_campaign_players_from_web(tmp_path):
 def test_web_player_invite_validates_input_and_membership_conflict(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
-        server = AdminWebServer(access, campaigns, sessions, bot)
+        server = AdminWebServer(database, access, campaigns, sessions, bot)
         token = await access.create_login(AdminIdentity(-100, 7, 'Campaign'))
         login = await server._route('GET', f'/login?token={token}', {}, b'')
         headers = {'cookie': login[1]['Set-Cookie'].split(';', 1)[0]}
@@ -887,7 +890,7 @@ def test_web_player_management_reports_invalid_and_missing_players(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
         await campaigns.register_player(-100, 8, 'Tilly')
-        server = AdminWebServer(access, campaigns, sessions, bot)
+        server = AdminWebServer(database, access, campaigns, sessions, bot)
         token = await access.create_login(AdminIdentity(-100, 7, 'Campaign'))
         login = await server._route('GET', f'/login?token={token}', {}, b'')
         headers = {'cookie': login[1]['Set-Cookie'].split(';', 1)[0]}
@@ -921,7 +924,7 @@ def test_web_transfers_master_role_to_existing_player(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
         await campaigns.register_player(-100, 8, 'Tilly')
-        server = AdminWebServer(access, campaigns, sessions, bot)
+        server = AdminWebServer(database, access, campaigns, sessions, bot)
         old_token = await access.create_login(AdminIdentity(-100, 7, 'Campaign'))
         old_login = await server._route('GET', f'/login?token={old_token}', {}, b'')
         old_headers = {'cookie': old_login[1]['Set-Cookie'].split(';', 1)[0]}
@@ -957,7 +960,7 @@ def test_web_transfers_master_role_to_existing_player(tmp_path):
 def test_web_master_transfer_rejects_invalid_or_unregistered_target(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
-        server = AdminWebServer(access, campaigns, sessions, bot)
+        server = AdminWebServer(database, access, campaigns, sessions, bot)
         token = await access.create_login(AdminIdentity(-100, 7, 'Campaign'))
         login = await server._route('GET', f'/login?token={token}', {}, b'')
         headers = {'cookie': login[1]['Set-Cookie'].split(';', 1)[0]}
@@ -985,6 +988,7 @@ def test_internal_api_issues_admin_link_for_master(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
         server = AdminWebServer(
+            database,
             access,
             campaigns,
             sessions,
@@ -1024,7 +1028,7 @@ def test_internal_game_api(tmp_path, monkeypatch):
 
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
-        server = AdminWebServer(access, campaigns, sessions, bot, internal_token='secret')
+        server = AdminWebServer(database, access, campaigns, sessions, bot, internal_token='secret')
         headers = {'authorization': 'Bearer secret'}
         unauthorized = await server._route('POST', '/api/game', {}, b'action=get&chat_id=-100')
         empty = await server._route('POST', '/api/game', headers, b'action=get&chat_id=-100')
@@ -1100,7 +1104,7 @@ def test_internal_game_api(tmp_path, monkeypatch):
 def test_internal_session_api(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
-        server = AdminWebServer(access, campaigns, sessions, bot, internal_token='secret')
+        server = AdminWebServer(database, access, campaigns, sessions, bot, internal_token='secret')
         headers = {'authorization': 'Bearer secret'}
 
         async def call(body: bytes, authorized: bool = True):
@@ -1147,7 +1151,7 @@ def test_internal_session_api(tmp_path):
 def test_internal_role_api(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
-        server = AdminWebServer(access, campaigns, sessions, bot, internal_token='secret')
+        server = AdminWebServer(database, access, campaigns, sessions, bot, internal_token='secret')
         headers = {'authorization': 'Bearer secret'}
 
         async def call(body: bytes, authorized: bool = True):
@@ -1185,6 +1189,7 @@ def test_internal_web_url_api(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
         server = AdminWebServer(
+            database,
             access,
             campaigns,
             sessions,
@@ -1225,7 +1230,7 @@ def test_internal_web_url_api(tmp_path):
 def test_web_server_start_read_request_and_close(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
-        server = AdminWebServer(access, campaigns, sessions, bot)
+        server = AdminWebServer(database, access, campaigns, sessions, bot)
         reader = asyncio.StreamReader()
         reader.feed_data(b'POST /schedule HTTP/1.1\r\nContent-Length: 3\r\n\r\na=1')
         reader.feed_eof()
@@ -1244,7 +1249,7 @@ def test_web_server_start_read_request_and_close(tmp_path):
 def test_web_session_lifecycle(tmp_path):
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
-        server = AdminWebServer(access, campaigns, sessions, bot)
+        server = AdminWebServer(database, access, campaigns, sessions, bot)
         identity = AdminIdentity(-100, 7, 'Campaign')
         token = await access.create_login(identity)
         login = await server._route('GET', f'/login?token={token}', {}, b'')
@@ -1344,7 +1349,7 @@ def test_web_server_handles_http_response(tmp_path):
 
     async def scenario():
         database, campaigns, sessions, access, bot = await setup(tmp_path)
-        server = AdminWebServer(access, campaigns, sessions, bot)
+        server = AdminWebServer(database, access, campaigns, sessions, bot)
         reader = asyncio.StreamReader()
         reader.feed_data(b'GET / HTTP/1.1\r\nHost: localhost\r\n\r\n')
         reader.feed_eof()

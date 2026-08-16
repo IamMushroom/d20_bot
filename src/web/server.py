@@ -6,7 +6,8 @@ from http import HTTPStatus
 from importlib.resources import files
 
 from auth import IdentityProvider, RateLimiter
-from services import CampaignService, OutboxService, SessionService
+from database import Database
+from services import CampaignService, GameWorkflowService, OutboxService, SessionService
 from web.access import AdminAccessService
 from web.api import InternalApi
 from web.http import Request, Response, ResponseTuple, read_request, serialize_response
@@ -42,6 +43,7 @@ PAGE_ROUTES = (
 class AdminWebServer:
     def __init__(
         self,
+        database: Database,
         access: AdminAccessService,
         campaigns: CampaignService,
         sessions: SessionService,
@@ -62,7 +64,14 @@ class AdminWebServer:
             internal_token,
             web_base_url,
         )
-        self._pages = PageHandlers(access, campaigns, sessions, outbox, identities, rate_limiter)
+        self._pages = PageHandlers(
+            access,
+            campaigns,
+            sessions,
+            GameWorkflowService(database, sessions, outbox),
+            identities,
+            rate_limiter,
+        )
         self._router = Router()
         self._router.add('GET', '/health', self._health_route)
         self._router.add('GET', '/static/app.js', self._javascript_route)

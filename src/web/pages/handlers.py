@@ -12,10 +12,10 @@ from auth import (
     LoginAlreadyExists,
     RateLimiter,
 )
-from game import ANNOUNCEMENT_TIMEZONES, game_message, valid_url
+from game import ANNOUNCEMENT_TIMEZONES, valid_url
 from services import (
     CampaignService,
-    OutboxService,
+    GameWorkflowService,
     SessionService,
     SessionStartStatus,
     SessionStopStatus,
@@ -40,14 +40,14 @@ class PageHandlers:
         access: AdminAccessService,
         campaigns: CampaignService,
         sessions: SessionService,
-        outbox: OutboxService,
+        workflows: GameWorkflowService,
         identities: IdentityProvider | None = None,
         rate_limiter: RateLimiter | None = None,
     ) -> None:
         self._access = access
         self._campaigns = campaigns
         self._sessions = sessions
-        self._outbox = outbox
+        self._workflows = workflows
         self._identities = identities
         self._rate_limiter = rate_limiter
 
@@ -300,20 +300,8 @@ class PageHandlers:
             return page_response(HTTPStatus.BAD_REQUEST, 'Неверные дата или URL.')
         if not valid_url(foundry_url):
             return page_response(HTTPStatus.BAD_REQUEST, 'Неверный Foundry URL.')
-        result = await self._sessions.schedule(
+        await self._workflows.schedule(
             identity.chat_id, identity.chat_title, scheduled_at, foundry_url
-        )
-        await self._outbox.publish(
-            'game_scheduled',
-            {
-                'chat_id': identity.chat_id,
-                'session_id': result.session.id,
-                'message': game_message(
-                    result.session,
-                    await self._sessions.get_announcement_timezone(identity.chat_id),
-                ),
-                'previous_message_id': result.previous_message_id,
-            },
         )
         return HTTPStatus.SEE_OTHER, {'Location': f'/?campaign={identity.chat_id}'}, b''
 
@@ -368,38 +356,25 @@ class PageHandlers:
         title = form.get('title', [''])[0].strip() or None
         if title is not None and len(title) > 100:
             return page_response(HTTPStatus.BAD_REQUEST, 'Название слишком длинное.')
-        result = await self._sessions.start(identity.chat_id, identity.user_id, title)
+        result = await self._workflows.start(identity.chat_id, identity.user_id, title)
         if result.status is SessionStartStatus.FORBIDDEN:
             return page_response(HTTPStatus.FORBIDDEN, 'Доступ к кампании отозван.')
         if result.status is SessionStartStatus.ALREADY_ACTIVE:
             return page_response(HTTPStatus.CONFLICT, 'Сессия уже активна.')
         session = result.session
         assert session is not None
-        await self._outbox.publish(
-            'session_started',
-            {
-                'chat_id': identity.chat_id,
-                'number': session.number,
-                'title': session.title,
-                'announcement_message_id': result.announcement_message_id,
-            },
-        )
         return HTTPStatus.SEE_OTHER, {'Location': f'/?campaign={identity.chat_id}'}, b''
 
     async def _stop_session(
         self, identity: AdminIdentity
     ) -> tuple[HTTPStatus, dict[str, str], bytes]:
-        result = await self._sessions.stop(identity.chat_id, identity.user_id)
+        result = await self._workflows.stop(identity.chat_id, identity.user_id)
         if result.status is SessionStopStatus.FORBIDDEN:
             return page_response(HTTPStatus.FORBIDDEN, 'Доступ к кампании отозван.')
         if result.status is SessionStopStatus.NO_ACTIVE_SESSION:
             return page_response(HTTPStatus.CONFLICT, 'Активной сессии нет.')
         session = result.session
         assert session is not None
-        await self._outbox.publish(
-            'session_stopped',
-            {'chat_id': identity.chat_id, 'number': session.number},
-        )
         return HTTPStatus.SEE_OTHER, {'Location': f'/?campaign={identity.chat_id}'}, b''
 
     async def _rename_player(
@@ -438,15 +413,7 @@ class PageHandlers:
             )
         if await self._campaigns.get_role(identity.chat_id, user_id) is not None:
             return page_response(HTTPStatus.CONFLICT, 'Пользователь уже состоит в кампании.')
-        await self._outbox.publish(
-            'player_invited',
-            {
-                'chat_id': identity.chat_id,
-                'requester_user_id': identity.user_id,
-                'target_user_id': user_id,
-                'character_name': name,
-            },
-        )
+        await self._workflows.invite_player(identity.chat_id, identity.user_id, user_id, name)
         return HTTPStatus.SEE_OTHER, {'Location': f'/?campaign={identity.chat_id}'}, b''
 
     async def _remove_player(
