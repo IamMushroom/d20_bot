@@ -39,7 +39,10 @@ class CampaignService:
 
     async def assign_master(self, chat_id: int, user_id: int, title: str | None = None) -> Campaign:
         async with self._database.transaction():
-            return await self._campaigns.set_master(chat_id, user_id, title)
+            campaign = await self._campaigns.get_or_create(chat_id, title)
+            await self._memberships.remove_master(campaign.id)
+            await self._memberships.set_role(campaign.id, user_id, 'master')
+            return campaign
 
     async def is_master(self, chat_id: int, user_id: int) -> bool:
         campaign = await self._campaigns.get_by_chat_id(chat_id)
@@ -102,6 +105,6 @@ class CampaignService:
                 or await self._memberships.get_role(campaign.id, new_master_id) != 'player'
             ):
                 return False
-            await self._campaigns.set_master(chat_id, new_master_id)
             await self._memberships.set_role(campaign.id, current_master_id, 'player')
+            await self._memberships.set_role(campaign.id, new_master_id, 'master')
             return True

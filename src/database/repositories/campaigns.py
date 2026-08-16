@@ -10,9 +10,6 @@ def _campaign(row: Row) -> Campaign:
         id=cast(int, row['id']),
         chat_id=cast(int, row['chat_id']),
         title=str(row['title']) if row['title'] is not None else None,
-        master_user_id=(
-            cast(int, row['master_user_id']) if row['master_user_id'] is not None else None
-        ),
         created_at=datetime.fromisoformat(str(row['created_at'])),
     )
 
@@ -40,33 +37,6 @@ class CampaignRepository:
             'SELECT * FROM campaigns WHERE chat_id = ?', (chat_id,)
         )
         return _campaign(row) if row is not None else None
-
-    async def set_master(self, chat_id: int, user_id: int, title: str | None = None) -> Campaign:
-        campaign = await self.get_or_create(chat_id, title)
-        now = datetime.now(UTC).isoformat()
-        await self._database.execute(
-            """INSERT INTO users (telegram_user_id, created_at) VALUES (?, ?)
-            ON CONFLICT(telegram_user_id) DO NOTHING""",
-            (user_id, now),
-        )
-        await self._database.execute(
-            "DELETE FROM campaign_memberships WHERE campaign_id = ? AND role = 'master'",
-            (campaign.id,),
-        )
-        await self._database.execute(
-            """INSERT INTO campaign_memberships (
-                campaign_id, user_id, role, created_at, updated_at
-            ) SELECT ?, id, 'master', ?, ? FROM users WHERE telegram_user_id = ?
-            ON CONFLICT(campaign_id, user_id) DO UPDATE SET
-                role = 'master', updated_at = excluded.updated_at""",
-            (campaign.id, now, now, user_id),
-        )
-        row = await self._database.fetch_one(
-            'UPDATE campaigns SET master_user_id = ? WHERE id = ? RETURNING *',
-            (user_id, campaign.id),
-        )
-        assert row is not None
-        return _campaign(row)
 
     async def set_title(self, chat_id: int, title: str) -> Campaign | None:
         row = await self._database.fetch_one(

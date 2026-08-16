@@ -61,7 +61,7 @@ def test_campaign_service_assigns_roles_and_updates_character(tmp_path):
         return campaign, master_registration, first, updated
 
     campaign, master_registration, first, updated = asyncio.run(scenario())
-    assert campaign.master_user_id == 7
+    assert campaign.title == 'Campaign'
     assert master_registration.status is PlayerRegistrationStatus.MASTER_CONFLICT
     assert master_registration.character is None
     assert first.character is not None
@@ -149,7 +149,7 @@ def test_campaign_service_transfers_master_and_keeps_previous_master_as_player(t
 
     transferred, roster, roles, repeated, outsider = asyncio.run(scenario())
     assert transferred
-    assert roster is not None and roster.campaign.master_user_id == 8
+    assert roster is not None
     assert roles == ('player', 'master')
     assert not repeated and not outsider
 
@@ -184,10 +184,17 @@ def test_campaign_service_rolls_back_master_transfer(tmp_path, monkeypatch):
         await service.assign_master(-100, 7, 'Campaign')
         await service.register_player(-100, 8, 'Tilly')
 
-        async def fail_previous_master_update(*_args):
-            raise RuntimeError('injected membership failure')
+        original_set_role = service._memberships.set_role
+        calls = 0
 
-        monkeypatch.setattr(service._memberships, 'set_role', fail_previous_master_update)
+        async def fail_new_master_update(*args):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise RuntimeError('injected membership failure')
+            return await original_set_role(*args)
+
+        monkeypatch.setattr(service._memberships, 'set_role', fail_new_master_update)
         with pytest.raises(RuntimeError, match='injected membership failure'):
             await service.transfer_master(-100, 7, 8)
 
@@ -200,7 +207,7 @@ def test_campaign_service_rolls_back_master_transfer(tmp_path, monkeypatch):
         return campaign, roles
 
     campaign, roles = asyncio.run(scenario())
-    assert campaign is not None and campaign.master_user_id == 7
+    assert campaign is not None
     assert roles == ('master', 'player')
 
 
@@ -208,24 +215,38 @@ def test_campaign_service_rolls_back_master_assignment(tmp_path, monkeypatch):
     async def scenario():
         database = await open_database(tmp_path, 'campaign-master-rollback.sqlite3')
         service = campaign_service(database)
-        original_fetch_one = database.fetch_one
 
-        async def fail_campaign_update(query, parameters=()):
-            if 'UPDATE campaigns SET master_user_id' in query:
-                raise RuntimeError('injected campaign failure')
-            return await original_fetch_one(query, parameters)
+        async def fail_master_membership(*_args):
+            raise RuntimeError('injected membership failure')
 
-        monkeypatch.setattr(database, 'fetch_one', fail_campaign_update)
-        with pytest.raises(RuntimeError, match='injected campaign failure'):
+        monkeypatch.setattr(service._memberships, 'set_role', fail_master_membership)
+        with pytest.raises(RuntimeError, match='injected membership failure'):
             await service.assign_master(-100, 7, 'Campaign')
 
-        campaign = await original_fetch_one('SELECT id FROM campaigns WHERE chat_id = -100')
-        membership = await original_fetch_one('SELECT campaign_id FROM campaign_memberships')
-        user = await original_fetch_one('SELECT id FROM users WHERE telegram_user_id = 7')
+        campaign = await database.fetch_one('SELECT id FROM campaigns WHERE chat_id = -100')
+        membership = await database.fetch_one('SELECT campaign_id FROM campaign_memberships')
+        user = await database.fetch_one('SELECT id FROM users WHERE telegram_user_id = 7')
         await database.close()
         return campaign, membership, user
 
     assert asyncio.run(scenario()) == (None, None, None)
+
+
+def test_campaign_has_at_most_one_canonical_master_membership(tmp_path):
+    async def scenario():
+        database = await open_database(tmp_path, 'campaign-master-invariant.sqlite3')
+        service = campaign_service(database)
+        await service.assign_master(-100, 7, 'Campaign')
+        await service.assign_master(-100, 8, 'Campaign')
+        rows = await database.fetch_all(
+            """SELECT user.telegram_user_id FROM campaign_memberships AS membership
+            JOIN users AS user ON user.id = membership.user_id
+            WHERE membership.role = 'master'"""
+        )
+        await database.close()
+        return rows
+
+    assert asyncio.run(scenario()) == [{'telegram_user_id': 8}]
 
 
 def test_session_service_schedules_and_replaces_announcement(tmp_path):

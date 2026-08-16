@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+- `ARCH-010`: каноническим источником мастера стала единственная membership с ролью `master`;
+  удалено дублирующее поле `campaigns.master_user_id`, добавлен уникальный partial index, а
+  назначение и передача роли окончательно перенесены из repository в application service.
+
 - `ARCH-009`: создание concrete repositories и `GameWorkflowService` перенесено в явный composition
   root `CoreRuntime`; сервисы теперь получают все persistence-зависимости через конструкторы, а
   архитектурный тест запрещает возвращать скрытое создание repositories в service layer.

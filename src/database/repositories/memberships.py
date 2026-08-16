@@ -55,6 +55,13 @@ class MembershipRepository:
         )
         return str(row['role']) if row is not None else None
 
+    async def remove_master(self, campaign_id: int) -> bool:
+        changed = await self._database.execute(
+            "DELETE FROM campaign_memberships WHERE campaign_id = ? AND role = 'master'",
+            (campaign_id,),
+        )
+        return changed > 0
+
     async def list_by_campaign(self, campaign_id: int) -> tuple[CampaignMembership, ...]:
         rows = await self._database.fetch_all(
             """SELECT membership.*, user.telegram_user_id

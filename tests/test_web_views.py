@@ -36,7 +36,7 @@ def test_page_response_escapes_plain_content():
 
 
 def test_dashboard_response_escapes_campaign_and_character_data():
-    campaign = Campaign(1, -100, '<Campaign>', 7, NOW)
+    campaign = Campaign(1, -100, '<Campaign>', NOW)
     character = Character(1, 1, 8, '<Tilly>', NOW, NOW)
     response = dashboard_response(
         AdminIdentity(-100, 7, '<Campaign>'),

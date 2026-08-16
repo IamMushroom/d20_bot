@@ -1360,7 +1360,11 @@ def test_internal_role_api(tmp_path):
     ]
     assert json.loads(results[3][2])['status'] == 'master_conflict'
     assert json.loads(results[5][2]) == {'status': 'registered', 'name': 'Hero'}
-    assert roster is not None and roster.campaign.master_user_id == 20
+    assert roster is not None
+    assert [(member.telegram_user_id, member.role) for member in roster.memberships] == [
+        (20, 'master'),
+        (21, 'player'),
+    ]
 
 
 def test_internal_web_url_api(tmp_path):

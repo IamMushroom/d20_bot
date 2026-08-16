@@ -7,7 +7,6 @@ class Campaign:
     id: int
     chat_id: int
     title: str | None
-    master_user_id: int | None
     created_at: datetime
 
 

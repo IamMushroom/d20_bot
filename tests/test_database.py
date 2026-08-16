@@ -1,4 +1,5 @@
 import asyncio
+import sqlite3
 from datetime import datetime
 from pathlib import Path
 
@@ -117,7 +118,61 @@ def test_migrations_are_idempotent(tmp_path):
         {'version': 10},
         {'version': 11},
         {'version': 12},
+        {'version': 13},
     ]
+
+
+def test_master_migration_preserves_membership_and_removes_legacy_column(tmp_path):
+    async def scenario():
+        migration_dir = tmp_path / 'master-migrations'
+        migration_dir.mkdir()
+        for version in range(1, 13):
+            source = next(MIGRATIONS.glob(f'{version:03}_*.sql'))
+            (migration_dir / source.name).write_text(source.read_text(encoding='utf-8'))
+
+        database = await SQLiteDatabase.connect(str(tmp_path / 'master-upgrade.sqlite3'))
+        await apply_migrations(database, migration_dir)
+        await database.execute(
+            """INSERT INTO campaigns (chat_id, title, master_user_id, created_at)
+            VALUES (-100, 'Campaign', 7, '2026-07-01T12:00:00+00:00')"""
+        )
+        campaign = await database.fetch_one('SELECT id FROM campaigns WHERE chat_id = -100')
+        assert campaign is not None
+        campaign_id = int(campaign['id'])
+        await database.execute(
+            "INSERT INTO users (telegram_user_id, created_at) VALUES (7, '2026-07-01T12:00:00+00:00')"
+        )
+        await database.execute(
+            """INSERT INTO campaign_memberships
+            (campaign_id, user_id, role, created_at, updated_at)
+            SELECT ?, id, 'master', created_at, created_at FROM users WHERE telegram_user_id = 7""",
+            (campaign_id,),
+        )
+
+        source = next(MIGRATIONS.glob('013_*.sql'))
+        (migration_dir / source.name).write_text(source.read_text(encoding='utf-8'))
+        await apply_migrations(database, migration_dir)
+        columns = await database.fetch_all('PRAGMA table_info(campaigns)')
+        master = await database.fetch_one(
+            'SELECT role FROM campaign_memberships WHERE campaign_id = ?', (campaign_id,)
+        )
+        await database.execute(
+            "INSERT INTO users (telegram_user_id, created_at) VALUES (8, '2026-07-01T12:00:00+00:00')"
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            await database.execute(
+                """INSERT INTO campaign_memberships
+                (campaign_id, user_id, role, created_at, updated_at)
+                SELECT ?, id, 'master', created_at, created_at
+                FROM users WHERE telegram_user_id = 8""",
+                (campaign_id,),
+            )
+        await database.close()
+        return columns, master
+
+    columns, master = asyncio.run(scenario())
+    assert 'master_user_id' not in {column['name'] for column in columns}
+    assert master == {'role': 'master'}
 
 
 def test_schedule_migration_preserves_sessions_recaps_and_planned_game(tmp_path):

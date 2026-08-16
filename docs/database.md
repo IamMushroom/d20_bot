@@ -36,7 +36,8 @@ migrations/
 ├── 009_campaign_memberships.sql
 ├── 010_web_auth.sql
 ├── 011_local_auth.sql
-└── 012_auth_rate_limits.sql
+├── 012_auth_rate_limits.sql
+└── 013_canonical_campaign_master.sql
 ```
 
 Telegram-команды не должны выполнять SQL или собирать бизнес-сценарии
@@ -195,11 +196,11 @@ schema_migrations(version, applied_at)
 | `id` | Внутренний идентификатор |
 | `chat_id` | Уникальный Telegram chat ID |
 | `title` | Название кампании или чата |
-| `master_user_id` | Telegram user ID назначенного мастера |
 | `created_at` | Время создания в UTC |
 
-`master_user_id` временно сохраняется для совместимости старых API. Источником прав является
-`campaign_memberships`.
+Канонический источник мастера — единственная запись `campaign_memberships` с ролью `master`.
+Отдельного поля мастера в `campaigns` нет: уникальный partial index запрещает создать двух
+мастеров одной кампании, а application-транзакция не оставляет промежуточную смену роли видимой.
 
 ### User и CampaignMembership
 
@@ -256,7 +257,9 @@ campaign = await CampaignRepository(database).get_or_create(
 
 - `get_or_create(chat_id, title)` создаёт кампанию или возвращает существующую. Переданный непустой `title` обновляет название.
 - `get_by_chat_id(chat_id)` ищет кампанию по Telegram chat ID.
-- `set_master(chat_id, user_id, title)` назначает или заменяет мастера кампании.
+
+Назначение и передача роли мастера являются application operations `CampaignService`, поскольку
+они координируют кампанию и memberships. `CampaignRepository` не управляет ролями.
 
 ### CharacterRepository
 

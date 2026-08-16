@@ -102,6 +102,11 @@ outbox leasing и координация нескольких consumers пока
 `GameWorkflowService`. Для этой сборки используются обычные Python-конструкторы без service
 locator, глобального registry или DI-фреймворка.
 
+Канонический источник мастера кампании — `campaign_memberships.role = 'master'`. Таблица
+`campaigns` не дублирует Telegram ID мастера, а partial unique index гарантирует не более одной
+master-membership на кампанию. `CampaignService` оркестрирует назначение и передачу роли внутри
+application-транзакции; repositories изменяют только принадлежащие им persistence concerns.
+
 ## Внутренний API
 
 Legacy action-based API физически изолирован в `web/api/legacy.py`, помечен deprecated и пока
