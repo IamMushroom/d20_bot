@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+- `TEST-001`: монолитный `tests/test_web.py` разделён на capability-oriented модули команд,
+  аутентификации, страниц кампаний/сессий/настроек, internal API и HTTP-сервера; общая test
+  composition вынесена в единый `tests/web/support.py` без изменения сценариев.
+
 - `ARCH-011`: удалены deprecated action-based Core API и compatibility controller; `/internal/*`
   остаётся единственным Bot/Core контрактом, а diagnostic path команды `/admin` приведён к
   фактически вызываемому endpoint.
