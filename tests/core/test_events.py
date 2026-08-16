@@ -31,7 +31,7 @@ from services import (
 from web import AdminAccessService, AdminWebServer
 from web.session_store import SQLiteWebSessionStore
 
-MIGRATIONS = Path(__file__).resolve().parent.parent / 'migrations'
+MIGRATIONS = Path(__file__).resolve().parents[2] / 'migrations'
 
 
 def campaign_service(database):

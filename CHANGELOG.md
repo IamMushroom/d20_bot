@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+- `TEST-002`: структура `tests/` приведена к пакетной структуре `src/`: тесты разнесены по
+  `auth`, `commands`, `core`, `database`, `dice`, `log_format`, `services` и `web`, а проверки
+  корневых entrypoint-модулей оставлены на верхнем уровне.
+
 - `TEST-001`: монолитный `tests/test_web.py` разделён на capability-oriented модули команд,
   аутентификации, страниц кампаний/сессий/настроек, internal API и HTTP-сервера; общая test
   composition вынесена в единый `tests/web/support.py` без изменения сценариев.

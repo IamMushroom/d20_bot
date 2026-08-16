@@ -13,7 +13,7 @@ from auth import (
 )
 from database import SQLiteDatabase, apply_migrations
 
-MIGRATIONS = Path(__file__).resolve().parent.parent / 'migrations'
+MIGRATIONS = Path(__file__).resolve().parents[2] / 'migrations'
 
 
 def test_local_registration_and_authentication(tmp_path):

@@ -5,7 +5,7 @@ from pathlib import Path
 from auth import SQLiteRateLimiter
 from database import SQLiteDatabase, apply_migrations
 
-MIGRATIONS = Path(__file__).resolve().parent.parent / 'migrations'
+MIGRATIONS = Path(__file__).resolve().parents[2] / 'migrations'
 
 
 def test_sqlite_rate_limiter_persists_and_resets_window(tmp_path):

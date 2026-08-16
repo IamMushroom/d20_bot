@@ -8,7 +8,7 @@ import core.runtime as runtime_module
 from core import CoreRuntime
 from database import SQLiteDatabase
 
-MIGRATIONS = Path(__file__).resolve().parent.parent / 'migrations'
+MIGRATIONS = Path(__file__).resolve().parents[2] / 'migrations'
 
 
 def test_core_runtime_owns_database_services_and_web_server(tmp_path):

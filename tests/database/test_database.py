@@ -14,7 +14,7 @@ from database.repositories import (
     SessionRepository,
 )
 
-MIGRATIONS = Path(__file__).resolve().parent.parent / 'migrations'
+MIGRATIONS = Path(__file__).resolve().parents[2] / 'migrations'
 
 
 async def open_database(tmp_path):
