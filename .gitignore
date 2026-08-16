@@ -58,3 +58,6 @@ DEV_CHANGELOG.md
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Added by code-review-graph
+.code-review-graph/

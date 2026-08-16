@@ -245,6 +245,7 @@ class AdminWebServer:
             '/player/invite',
             '/player/rename',
             '/player/remove',
+            '/master/transfer',
         }:
             try:
                 chat_id = int(form.get('chat_id', [str(identity.chat_id)])[0])
@@ -322,6 +323,8 @@ class AdminWebServer:
             return await self._rename_player(selected_identity, form)
         if method == 'POST' and url.path == '/player/remove':
             return await self._remove_player(selected_identity, form)
+        if method == 'POST' and url.path == '/master/transfer':
+            return await self._transfer_master(selected_identity, form)
         return page_response(HTTPStatus.NOT_FOUND, 'Страница не найдена.')
 
     async def _local_session(
@@ -833,6 +836,20 @@ class AdminWebServer:
             return page_response(HTTPStatus.BAD_REQUEST, 'Некорректные данные игрока.')
         if not await self._campaigns.remove_player(identity.chat_id, user_id):
             return page_response(HTTPStatus.NOT_FOUND, 'Игрок не найден в этой кампании.')
+        return HTTPStatus.SEE_OTHER, {'Location': f'/?campaign={identity.chat_id}'}, b''
+
+    async def _transfer_master(
+        self, identity: AdminIdentity, form: Mapping[str, list[str]]
+    ) -> tuple[HTTPStatus, dict[str, str], bytes]:
+        try:
+            user_id = int(form['user_id'][0])
+        except KeyError, ValueError, IndexError:
+            return page_response(HTTPStatus.BAD_REQUEST, 'Некорректный новый мастер.')
+        if not await self._campaigns.transfer_master(identity.chat_id, identity.user_id, user_id):
+            return page_response(
+                HTTPStatus.CONFLICT,
+                'Передать роль можно только зарегистрированному игроку этой кампании.',
+            )
         return HTTPStatus.SEE_OTHER, {'Location': f'/?campaign={identity.chat_id}'}, b''
 
     @staticmethod

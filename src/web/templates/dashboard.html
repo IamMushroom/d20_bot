@@ -88,6 +88,20 @@
             <li>Игроки не зарегистрированы</li>
           {% endfor %}
         </ul>
+        {% if role == 'master' and roster.characters %}
+          <form class="master-transfer" method="post" action="/master/transfer" data-confirm="Передать роль мастера? После этого управление кампанией перейдёт выбранному игроку.">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="chat_id" value="{{ campaign_chat_id }}">
+            <label>Новый мастер
+              <select name="user_id" required>
+                {% for character in roster.characters %}
+                  <option value="{{ character.telegram_user_id }}">{{ character.name }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <button class="button--danger" type="submit">Передать роль мастера</button>
+          </form>
+        {% endif %}
       {% else %}
         <div class="empty">Состав кампании не найден.</div>
       {% endif %}

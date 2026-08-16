@@ -107,6 +107,27 @@ def test_campaign_service_renames_and_removes_player_without_deleting_character(
     assert not repeated_remove
 
 
+def test_campaign_service_transfers_master_and_keeps_previous_master_as_player(tmp_path):
+    async def scenario():
+        database = await open_database(tmp_path, 'campaign-master-transfer.sqlite3')
+        service = CampaignService(database)
+        await service.assign_master(-100, 7, 'Campaign')
+        await service.register_player(-100, 8, 'Tilly')
+        transferred = await service.transfer_master(-100, 7, 8)
+        roster = await service.get_roster(-100)
+        roles = await service.get_role(-100, 7), await service.get_role(-100, 8)
+        repeated = await service.transfer_master(-100, 7, 8)
+        outsider = await service.transfer_master(-100, 8, 9)
+        await database.close()
+        return transferred, roster, roles, repeated, outsider
+
+    transferred, roster, roles, repeated, outsider = asyncio.run(scenario())
+    assert transferred
+    assert roster is not None and roster.campaign.master_user_id == 8
+    assert roles == ('player', 'master')
+    assert not repeated and not outsider
+
+
 def test_session_service_schedules_and_replaces_announcement(tmp_path):
     async def scenario():
         database = await open_database(tmp_path, 'schedule-service.sqlite3')

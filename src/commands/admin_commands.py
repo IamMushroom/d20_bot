@@ -1,18 +1,12 @@
 import logging
-from datetime import UTC, datetime
-from urllib.parse import urlencode
 
 from telegram import Update
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from commands.game_utils import valid_url
-from commands.helpers import campaign_service, is_admin, session_service
+from commands.helpers import is_admin
 from core import CORE_CLIENT_KEY, CoreClient, CoreClientError
-from web.access import AdminAccessService, AdminIdentity
-
-ADMIN_ACCESS_KEY = 'admin_access'
-WEB_BASE_URL_KEY = 'web_base_url'
 
 
 async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -29,49 +23,24 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             reply_to_message_id=message.id,
         )
         return
-    core_client: CoreClient | None = context.application.bot_data.get(CORE_CLIENT_KEY)
-    if core_client is not None:
-        try:
-            url = await core_client.create_admin_link(
-                chat.id, user.id, getattr(chat, 'title', None)
-            )
-        except CoreClientError as error:
-            logging.warning(
-                'Could not create admin link through Core',
-                extra={
-                    'error_type': type(error).__name__,
-                    'error_message': str(error),
-                    'core_path': '/api/admin-link',
-                },
-            )
-            await context.bot.send_message(
-                chat_id=chat.id,
-                text='⚠️ Core недоступен или отклонил запрос.',
-                reply_to_message_id=message.id,
-            )
-            return
-        await _send_admin_link(update, context, url)
-        return
-    base_url = await session_service(context).get_web_base_url(
-        chat.id
-    ) or context.application.bot_data.get(WEB_BASE_URL_KEY)
-    if not base_url:
+    core_client: CoreClient = context.application.bot_data[CORE_CLIENT_KEY]
+    try:
+        url = await core_client.create_admin_link(chat.id, user.id, getattr(chat, 'title', None))
+    except CoreClientError as error:
+        logging.warning(
+            'Could not create admin link through Core',
+            extra={
+                'error_type': type(error).__name__,
+                'error_message': str(error),
+                'core_path': '/api/admin-link',
+            },
+        )
         await context.bot.send_message(
             chat_id=chat.id,
-            text='⚠️ Адрес веб-панели не задан. Используйте /web_url.',
+            text='⚠️ Core недоступен или отклонил запрос.',
             reply_to_message_id=message.id,
         )
         return
-    if not await campaign_service(context).is_master(chat.id, user.id):
-        await context.bot.send_message(
-            chat_id=chat.id,
-            text='⛔ Веб-панель доступна только назначенному мастеру.',
-            reply_to_message_id=message.id,
-        )
-        return
-    access: AdminAccessService = context.application.bot_data[ADMIN_ACCESS_KEY]
-    token = await access.create_login(AdminIdentity(chat.id, user.id, getattr(chat, 'title', None)))
-    url = f'{base_url.rstrip("/")}/login?{urlencode({"token": token})}'
     await _send_admin_link(update, context, url)
 
 
@@ -81,9 +50,7 @@ async def web_register(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     user = update.effective_user
     if message is None or user is None:
         return
-    core: CoreClient | None = context.application.bot_data.get(CORE_CLIENT_KEY)
-    if core is None:
-        return
+    core: CoreClient = context.application.bot_data[CORE_CLIENT_KEY]
     try:
         code = await core.create_registration_code(user.id)
     except CoreClientError:
@@ -130,15 +97,10 @@ async def web_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
     if chat is None or message is None:
         return
-    core: CoreClient | None = context.application.bot_data.get(CORE_CLIENT_KEY)
+    core: CoreClient = context.application.bot_data[CORE_CLIENT_KEY]
     if not context.args:
         try:
-            value = (
-                await core.get_web_url(chat.id)
-                if core is not None
-                else await session_service(context).get_web_base_url(chat.id)
-                or context.application.bot_data.get(WEB_BASE_URL_KEY)
-            )
+            value = await core.get_web_url(chat.id)
         except CoreClientError:
             value = None
         text = f'🌐 Адрес панели: {value}' if value else '📭 Адрес панели пока не задан.'
@@ -164,10 +126,7 @@ async def web_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     value = context.args[0].rstrip('/')
     try:
-        if core is not None:
-            await core.set_web_url(chat.id, value)
-        else:
-            await session_service(context).set_web_base_url(chat.id, value, datetime.now(UTC))
+        await core.set_web_url(chat.id, value)
     except CoreClientError:
         await context.bot.send_message(
             chat_id=chat.id,

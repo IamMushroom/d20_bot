@@ -1,12 +1,9 @@
-from datetime import UTC, datetime
-from os import getenv
-
 from telegram import Update
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from commands.game_utils import valid_url
-from commands.helpers import is_admin, session_service
+from commands.helpers import is_admin
 from core import CORE_CLIENT_KEY, CoreClient, CoreClientError
 
 
@@ -17,15 +14,10 @@ async def game_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if chat is None or message is None:
         return
 
-    core: CoreClient | None = context.application.bot_data.get(CORE_CLIENT_KEY)
+    core: CoreClient = context.application.bot_data[CORE_CLIENT_KEY]
     if not context.args:
         try:
-            foundry_url = (
-                await core.get_game_url(chat.id)
-                if core is not None
-                else await session_service(context).get_default_url(chat.id)
-                or getenv('D20_BOT_FOUNDRY_URL', '')
-            )
+            foundry_url = await core.get_game_url(chat.id)
         except CoreClientError:
             foundry_url = None
         text = (
@@ -57,12 +49,7 @@ async def game_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     try:
-        if core is not None:
-            await core.set_game_url(chat.id, context.args[0])
-        else:
-            await session_service(context).set_default_url(
-                chat.id, context.args[0], datetime.now(UTC)
-            )
+        await core.set_game_url(chat.id, context.args[0])
     except CoreClientError:
         await context.bot.send_message(
             chat_id=chat.id,

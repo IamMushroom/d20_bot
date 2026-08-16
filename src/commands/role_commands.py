@@ -2,7 +2,7 @@ from telegram import Update
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
-from commands.helpers import campaign_service, is_admin
+from commands.helpers import is_admin
 from commands.member_tags import (
     TAG_ADMINISTRATOR,
     TAG_SET,
@@ -10,7 +10,6 @@ from commands.member_tags import (
     set_member_tag,
 )
 from core import CORE_CLIENT_KEY, CoreClient, CoreClientError
-from services import PlayerRegistrationStatus
 
 MAX_TAG_LENGTH = 16
 
@@ -44,14 +43,9 @@ async def master(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         return
 
-    core: CoreClient | None = context.application.bot_data.get(CORE_CLIENT_KEY)
+    core: CoreClient = context.application.bot_data[CORE_CLIENT_KEY]
     try:
-        if core is not None:
-            await core.assign_master(chat.id, target.id, getattr(chat, 'title', None))
-        else:
-            await campaign_service(context).assign_master(
-                chat.id, target.id, getattr(chat, 'title', None)
-            )
+        await core.assign_master(chat.id, target.id, getattr(chat, 'title', None))
     except CoreClientError:
         await context.bot.send_message(
             chat_id=chat.id,
@@ -82,20 +76,11 @@ async def player(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         return
 
-    core: CoreClient | None = context.application.bot_data.get(CORE_CLIENT_KEY)
+    core: CoreClient = context.application.bot_data[CORE_CLIENT_KEY]
     try:
-        if core is not None:
-            remote = await core.register_player(
-                chat.id, user.id, name, getattr(chat, 'title', None)
-            )
-            status = remote.status
-            character_name = remote.name
-        else:
-            local = await campaign_service(context).register_player(
-                chat.id, user.id, name, getattr(chat, 'title', None)
-            )
-            status = local.status
-            character_name = local.character.name if local.character is not None else None
+        remote = await core.register_player(chat.id, user.id, name, getattr(chat, 'title', None))
+        status = remote.status
+        character_name = remote.name
     except CoreClientError:
         await context.bot.send_message(
             chat_id=chat.id,
@@ -103,7 +88,7 @@ async def player(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             reply_to_message_id=message.id,
         )
         return
-    if status is PlayerRegistrationStatus.MASTER_CONFLICT or status == 'master_conflict':
+    if status == 'master_conflict':
         await context.bot.send_message(
             chat_id=chat.id,
             text='⚠️ Мастер уже имеет роль «Мастер» и не может зарегистрироваться игроком.',

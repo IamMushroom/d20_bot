@@ -9,15 +9,7 @@ from unittest.mock import AsyncMock
 from telegram.error import BadRequest
 
 from auth import RateLimitResult, SQLiteLocalIdentityProvider
-from commands.admin_commands import (
-    ADMIN_ACCESS_KEY,
-    CORE_CLIENT_KEY,
-    WEB_BASE_URL_KEY,
-    admin,
-    web_register,
-    web_url,
-)
-from commands.helpers import CAMPAIGN_SERVICE_KEY, SESSION_SERVICE_KEY
+from commands.admin_commands import CORE_CLIENT_KEY, admin, web_register, web_url
 from core import CoreClientError
 from database import SQLiteDatabase, apply_migrations
 from services import CampaignService, SessionService
@@ -293,15 +285,12 @@ def test_web_register_command_handles_missing_context_and_core_error():
     async def scenario():
         bot = SimpleNamespace(send_message=AsyncMock())
         empty = SimpleNamespace(effective_message=None, effective_user=None)
-        context = SimpleNamespace(
-            bot=bot, application=SimpleNamespace(bot_data={CORE_CLIENT_KEY: None})
-        )
+        context = SimpleNamespace(bot=bot, application=SimpleNamespace(bot_data={}))
         await web_register(empty, context)
         update = SimpleNamespace(
             effective_message=SimpleNamespace(id=1, chat_id=7),
             effective_user=SimpleNamespace(id=7),
         )
-        await web_register(update, context)
         context.application.bot_data[CORE_CLIENT_KEY] = SimpleNamespace(
             create_registration_code=AsyncMock(side_effect=CoreClientError('offline'))
         )
@@ -312,54 +301,15 @@ def test_web_register_command_handles_missing_context_and_core_error():
     bot.send_message.assert_awaited_once()
 
 
-def test_admin_command_validates_configuration_and_master(tmp_path):
+def test_admin_command_reports_private_message_failure():
     async def scenario():
-        database, campaigns, _sessions, access, bot = await setup(tmp_path)
-        update = SimpleNamespace(
-            effective_chat=SimpleNamespace(id=-100, title='Campaign'),
-            effective_message=SimpleNamespace(id=10),
-            effective_user=SimpleNamespace(id=7),
+        core = SimpleNamespace(
+            create_admin_link=AsyncMock(return_value='https://d20.example/login')
         )
-        data = {
-            CAMPAIGN_SERVICE_KEY: campaigns,
-            SESSION_SERVICE_KEY: _sessions,
-            ADMIN_ACCESS_KEY: access,
-        }
-        context = SimpleNamespace(application=SimpleNamespace(bot_data=data), bot=bot)
-
-        await admin(update, context)
-        disabled = bot.send_message.await_args.kwargs['text']
-        data[WEB_BASE_URL_KEY] = 'https://d20.example'
-        update.effective_user.id = 8
-        await admin(update, context)
-        forbidden = bot.send_message.await_args.kwargs['text']
-        update.effective_user.id = 7
-        await admin(update, context)
-        private_message = bot.send_message.await_args.kwargs
-
-        await database.close()
-        return disabled, forbidden, private_message
-
-    disabled, forbidden, private_message = asyncio.run(scenario())
-    assert '/web_url' in disabled
-    assert 'только назначенному мастеру' in forbidden
-    assert private_message['chat_id'] == 7
-    assert 'https://d20.example/login?token=' in private_message['text']
-
-
-def test_admin_command_reports_private_message_failure(tmp_path):
-    async def scenario():
-        database, campaigns, _sessions, access, bot = await setup(tmp_path)
+        bot = SimpleNamespace(send_message=AsyncMock())
         bot.send_message.side_effect = [BadRequest('blocked'), SimpleNamespace(id=1)]
         context = SimpleNamespace(
-            application=SimpleNamespace(
-                bot_data={
-                    CAMPAIGN_SERVICE_KEY: campaigns,
-                    SESSION_SERVICE_KEY: _sessions,
-                    ADMIN_ACCESS_KEY: access,
-                    WEB_BASE_URL_KEY: 'http://localhost:8190',
-                }
-            ),
+            application=SimpleNamespace(bot_data={CORE_CLIENT_KEY: core}),
             bot=bot,
         )
         update = SimpleNamespace(
@@ -368,7 +318,6 @@ def test_admin_command_reports_private_message_failure(tmp_path):
             effective_user=SimpleNamespace(id=7),
         )
         await admin(update, context)
-        await database.close()
         return bot.send_message.await_args.kwargs['text']
 
     assert 'личные сообщения' in asyncio.run(scenario())
@@ -491,49 +440,34 @@ def test_web_url_command_reports_connected_core_error():
     assert 'Core недоступен' in failed
 
 
-def test_web_url_command_sets_chat_address(tmp_path):
+def test_web_url_command_validates_admin_and_url():
     async def scenario():
-        database, campaigns, sessions, access, bot = await setup(tmp_path)
-        bot.get_chat_member = AsyncMock(return_value=SimpleNamespace(status='member'))
-        data = {
-            CAMPAIGN_SERVICE_KEY: campaigns,
-            SESSION_SERVICE_KEY: sessions,
-            ADMIN_ACCESS_KEY: access,
-            WEB_BASE_URL_KEY: '',
-        }
-        context = SimpleNamespace(args=[], application=SimpleNamespace(bot_data=data), bot=bot)
+        core = SimpleNamespace(set_web_url=AsyncMock())
+        bot = SimpleNamespace(
+            send_message=AsyncMock(),
+            get_chat_member=AsyncMock(return_value=SimpleNamespace(status='member')),
+        )
+        context = SimpleNamespace(
+            args=['https://new.example'],
+            bot=bot,
+            application=SimpleNamespace(bot_data={CORE_CLIENT_KEY: core}),
+        )
         update = SimpleNamespace(
-            effective_chat=SimpleNamespace(id=-100, type='group', title='Campaign'),
+            effective_chat=SimpleNamespace(id=-100, type='group'),
             effective_message=SimpleNamespace(id=10),
             effective_user=SimpleNamespace(id=7),
         )
         await web_url(update, context)
-        missing = bot.send_message.await_args.kwargs['text']
-        context.args = ['https://d20.example/']
-        await web_url(update, context)
         denied = bot.send_message.await_args.kwargs['text']
         bot.get_chat_member.return_value.status = 'administrator'
-        context.args = ['bad']
+        context.args = ['not-a-url']
         await web_url(update, context)
-        invalid = bot.send_message.await_args.kwargs['text']
-        context.args = ['https://d20.example/']
-        await web_url(update, context)
-        saved = await sessions.get_web_base_url(-100)
-        context.args = []
-        await web_url(update, context)
-        shown = bot.send_message.await_args.kwargs['text']
-        await admin(update, context)
-        link = bot.send_message.await_args.kwargs['text']
-        await database.close()
-        return missing, denied, invalid, saved, shown, link
+        return core, denied, bot.send_message.await_args.kwargs['text']
 
-    missing, denied, invalid, saved, shown, link = asyncio.run(scenario())
-    assert 'не задан' in missing
-    assert 'только администраторы' in denied
-    assert 'Формат' in invalid
-    assert saved == 'https://d20.example'
-    assert 'https://d20.example' in shown
-    assert 'https://d20.example/login?token=' in link
+    core, denied, invalid = asyncio.run(scenario())
+    assert denied != invalid
+    assert '/web_url' in invalid
+    core.set_web_url.assert_not_awaited()
 
 
 def test_web_login_dashboard_and_schedule(tmp_path, monkeypatch):
@@ -969,6 +903,70 @@ def test_web_player_management_reports_invalid_and_missing_players(tmp_path):
         HTTPStatus.BAD_REQUEST,
         HTTPStatus.NOT_FOUND,
     ]
+
+
+def test_web_transfers_master_role_to_existing_player(tmp_path):
+    async def scenario():
+        database, campaigns, sessions, access, bot = await setup(tmp_path)
+        await campaigns.register_player(-100, 8, 'Tilly')
+        server = AdminWebServer(access, campaigns, sessions, bot)
+        old_token = await access.create_login(AdminIdentity(-100, 7, 'Campaign'))
+        old_login = await server._route('GET', f'/login?token={old_token}', {}, b'')
+        old_headers = {'cookie': old_login[1]['Set-Cookie'].split(';', 1)[0]}
+        before = await server._route('GET', '/', old_headers, b'')
+        transferred = await server._route(
+            'POST',
+            '/master/transfer',
+            old_headers,
+            await csrf_body(access, old_headers, b'chat_id=-100&user_id=8'),
+        )
+        old_dashboard = await server._route('GET', '/', old_headers, b'')
+        denied = await server._route(
+            'POST',
+            '/session/start',
+            old_headers,
+            await csrf_body(access, old_headers, b'chat_id=-100'),
+        )
+        new_token = await access.create_login(AdminIdentity(-100, 8, 'Campaign'))
+        new_login = await server._route('GET', f'/login?token={new_token}', {}, b'')
+        new_headers = {'cookie': new_login[1]['Set-Cookie'].split(';', 1)[0]}
+        new_dashboard = await server._route('GET', '/', new_headers, b'')
+        await database.close()
+        return before, transferred, old_dashboard, denied, new_dashboard
+
+    before, transferred, old_dashboard, denied, new_dashboard = asyncio.run(scenario())
+    assert b'/master/transfer' in before[2]
+    assert transferred[0] is HTTPStatus.SEE_OTHER
+    assert 'Режим игрока'.encode() in old_dashboard[2]
+    assert denied[0] is HTTPStatus.FORBIDDEN
+    assert b'/session/start' in new_dashboard[2]
+
+
+def test_web_master_transfer_rejects_invalid_or_unregistered_target(tmp_path):
+    async def scenario():
+        database, campaigns, sessions, access, bot = await setup(tmp_path)
+        server = AdminWebServer(access, campaigns, sessions, bot)
+        token = await access.create_login(AdminIdentity(-100, 7, 'Campaign'))
+        login = await server._route('GET', f'/login?token={token}', {}, b'')
+        headers = {'cookie': login[1]['Set-Cookie'].split(';', 1)[0]}
+        invalid = await server._route(
+            'POST',
+            '/master/transfer',
+            headers,
+            await csrf_body(access, headers, b'chat_id=-100&user_id=nope'),
+        )
+        missing = await server._route(
+            'POST',
+            '/master/transfer',
+            headers,
+            await csrf_body(access, headers, b'chat_id=-100&user_id=9'),
+        )
+        await database.close()
+        return invalid, missing
+
+    invalid, missing = asyncio.run(scenario())
+    assert invalid[0] is HTTPStatus.BAD_REQUEST
+    assert missing[0] is HTTPStatus.CONFLICT
 
 
 def test_internal_api_issues_admin_link_for_master(tmp_path):

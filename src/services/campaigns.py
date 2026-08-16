@@ -81,3 +81,17 @@ class CampaignService:
             if campaign is not None
             else False
         )
+
+    async def transfer_master(
+        self, chat_id: int, current_master_id: int, new_master_id: int
+    ) -> bool:
+        campaign = await self._campaigns.get_by_chat_id(chat_id)
+        if (
+            campaign is None
+            or await self._memberships.get_role(campaign.id, current_master_id) != 'master'
+            or await self._memberships.get_role(campaign.id, new_master_id) != 'player'
+        ):
+            return False
+        await self._campaigns.set_master(chat_id, new_master_id)
+        await self._memberships.set_role(campaign.id, current_master_id, 'player')
+        return True
