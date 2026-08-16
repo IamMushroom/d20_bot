@@ -263,6 +263,44 @@ class InternalApi:
             return self._json(HTTPStatus.OK, {'ok': True})
         return self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_action'})
 
+    async def list_events(self, request: Request) -> ResponseTuple:
+        if not self._authorized(request.headers):
+            return self._error(
+                HTTPStatus.UNAUTHORIZED,
+                'unauthorized',
+                'A valid Core bearer token is required.',
+            )
+        events = await self._outbox.pending()
+        return self._json(
+            HTTPStatus.OK,
+            {
+                'events': [
+                    {'id': event.id, 'type': event.event_type, 'payload': event.payload}
+                    for event in events
+                ]
+            },
+        )
+
+    async def acknowledge_event(self, request: Request) -> ResponseTuple:
+        if not self._authorized(request.headers):
+            return self._error(
+                HTTPStatus.UNAUTHORIZED,
+                'unauthorized',
+                'A valid Core bearer token is required.',
+            )
+        try:
+            event_id = int(request.path_parameters['event_id'])
+            if event_id <= 0:
+                raise ValueError
+        except KeyError, ValueError:
+            return self._error(
+                HTTPStatus.BAD_REQUEST,
+                'invalid_event_id',
+                'Event ID must be a positive integer.',
+            )
+        await self._outbox.acknowledge(event_id)
+        return self._json(HTTPStatus.OK, {'ok': True})
+
     def _authorized(self, headers: Mapping[str, str]) -> bool:
         authorization = headers.get('authorization', '')
         supplied = (
@@ -289,3 +327,7 @@ class InternalApi:
             {'Content-Type': 'application/json; charset=utf-8'},
             json.dumps(payload, ensure_ascii=False).encode(),
         )
+
+    @classmethod
+    def _error(cls, status: HTTPStatus, code: str, message: str) -> ResponseTuple:
+        return cls._json(status, {'error': {'code': code, 'message': message}})

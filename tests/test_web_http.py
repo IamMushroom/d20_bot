@@ -56,6 +56,20 @@ def test_router_rejects_duplicate_routes():
         router.add('GET', '/', handler)
 
 
+def test_router_extracts_path_parameters_and_detects_method_mismatch():
+    router = Router()
+
+    async def handler(request):
+        return HTTPStatus.OK, {}, request.path_parameters['event_id'].encode()
+
+    router.add('POST', '/internal/events/{event_id}/ack', handler)
+    result = asyncio.run(router.dispatch(Request('POST', '/internal/events/42/ack', {}, b'')))
+
+    assert result == (HTTPStatus.OK, {}, b'42')
+    assert router.supports_path('/internal/events/42/ack')
+    assert asyncio.run(router.dispatch(Request('GET', '/internal/events/42/ack', {}, b''))) is None
+
+
 def test_request_reader_rejects_oversized_head_and_body():
     async def scenario():
         oversized_head = asyncio.StreamReader()

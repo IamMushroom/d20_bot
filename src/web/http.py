@@ -1,6 +1,6 @@
 import asyncio
 from collections.abc import Iterator, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from http import HTTPStatus
 from urllib.parse import parse_qs, urlsplit
 
@@ -17,6 +17,7 @@ class Request:
     remote_host: str | None = None
     path: str = field(init=False)
     query: Mapping[str, list[str]] = field(init=False)
+    path_parameters: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         url = urlsplit(self.target)
@@ -33,6 +34,9 @@ class Request:
         yield self.target
         yield self.headers
         yield self.body
+
+    def with_path_parameters(self, parameters: Mapping[str, str]) -> Request:
+        return replace(self, path_parameters=dict(parameters))
 
 
 @dataclass(frozen=True, slots=True)

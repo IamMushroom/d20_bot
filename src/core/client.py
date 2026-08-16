@@ -10,7 +10,9 @@ CORE_CLIENT_KEY = 'core_client'
 
 
 class CoreClientError(Exception):
-    pass
+    def __init__(self, message: str, *, code: str | None = None) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,7 +170,7 @@ class CoreClient:
         return PlayerRegistration(status, returned_name)
 
     async def get_events(self) -> tuple[CoreEvent, ...]:
-        payload = await self._request('/api/events', {'action': 'get'})
+        payload = await self._request('/internal/events', {}, method='GET')
         raw_events = payload.get('events')
         if not isinstance(raw_events, list):
             raise CoreClientError('Core returned an invalid response')
@@ -189,26 +191,42 @@ class CoreClient:
         return tuple(events)
 
     async def acknowledge_event(self, event_id: int) -> None:
-        await self._request('/api/events', {'action': 'ack', 'event_id': event_id})
+        await self._request(f'/internal/events/{event_id}/ack', {})
 
-    async def _request(self, path: str, fields: dict[str, object]) -> dict[str, object]:
-        return await asyncio.to_thread(self._request_sync, path, fields)
+    async def _request(
+        self, path: str, fields: dict[str, object], *, method: str = 'POST'
+    ) -> dict[str, object]:
+        return await asyncio.to_thread(self._request_sync, path, fields, method=method)
 
-    def _request_sync(self, path: str, fields: dict[str, object]) -> dict[str, object]:
+    def _request_sync(
+        self, path: str, fields: dict[str, object], *, method: str = 'POST'
+    ) -> dict[str, object]:
+        encoded = urlencode(fields)
+        url = f'{self.base_url.rstrip("/")}{path}'
+        if method == 'GET' and encoded:
+            url = f'{url}?{encoded}'
         request = Request(
-            f'{self.base_url.rstrip("/")}{path}',
-            data=urlencode(fields).encode(),
+            url,
+            data=encoded.encode() if method != 'GET' else None,
             headers={
                 'Authorization': f'Bearer {self.token}',
                 'Content-Type': 'application/x-www-form-urlencoded',
             },
-            method='POST',
+            method=method,
         )
         try:
             with urlopen(request, timeout=5) as response:
                 payload = json.load(response)
         except HTTPError as error:
-            raise CoreClientError(f'Core returned HTTP {error.code}') from error
+            code = None
+            try:
+                error_payload = json.load(error)
+                detail = error_payload.get('error') if isinstance(error_payload, dict) else None
+                if isinstance(detail, dict) and isinstance(detail.get('code'), str):
+                    code = detail['code']
+            except AttributeError, json.JSONDecodeError, TypeError:
+                pass
+            raise CoreClientError(f'Core returned HTTP {error.code}', code=code) from error
         except (URLError, TimeoutError, json.JSONDecodeError) as error:
             raise CoreClientError(f'Core is unavailable: {error}') from error
         if not isinstance(payload, dict):

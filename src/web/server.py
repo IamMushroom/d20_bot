@@ -83,6 +83,8 @@ class AdminWebServer:
         self._router.add('POST', '/api/role', self._api.role)
         self._router.add('POST', '/api/web-url', self._api.web_url)
         self._router.add('POST', '/api/events', self._api.events)
+        self._router.add('GET', '/internal/events', self._api.list_events)
+        self._router.add('POST', '/internal/events/{event_id}/ack', self._api.acknowledge_event)
         for method, path in PAGE_ROUTES:
             self._router.add(method, path, self._pages.dispatch)
 

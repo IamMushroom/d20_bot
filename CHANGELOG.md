@@ -44,6 +44,9 @@
   `ROLLBACK`; параллельные операции сериализуются, а вложенные транзакции явно запрещены.
 - `DB-002`: web-сценарии планирования, старта и завершения игры перенесены в транзакционный
   `GameWorkflowService`; изменение сессии и связанное outbox-событие теперь фиксируются атомарно.
+- `API-001` (этап 1): добавлены operation-oriented endpoints `GET /internal/events` и
+  `POST /internal/events/{event_id}/ack`, path-параметры Router и структурированные ошибки со
+  стабильным `error.code`; `CoreClient` переведён на новый outbox API, legacy `/api/events` сохранён.
 - `WEB-ARCH-001` (этап 1): HTTP request/response, маршрутизация и trusted proxy/cookie middleware
   вынесены из `AdminWebServer` в отдельные модули с сохранением совместимости существующих handlers.
 - `WEB-ARCH-001` (этап 2): internal API endpoints сгруппированы в отдельном `InternalApi` и

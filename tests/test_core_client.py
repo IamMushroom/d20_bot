@@ -57,6 +57,30 @@ def test_core_client_rejects_invalid_response(monkeypatch):
         asyncio.run(CoreClient('http://core:8190', 'secret').create_admin_link(-100, 7, None))
 
 
+def test_core_client_supports_get_and_reads_structured_error_code(monkeypatch):
+    response = Mock()
+    response.__enter__ = Mock(return_value=io.StringIO('{"events":[]}'))
+    response.__exit__ = Mock(return_value=False)
+    urlopen = Mock(return_value=response)
+    monkeypatch.setattr(client_module, 'urlopen', urlopen)
+    client = CoreClient('http://core:8190', 'secret')
+
+    assert client._request_sync('/internal/events', {}, method='GET') == {'events': []}
+    request = urlopen.call_args.args[0]
+    assert request.method == 'GET'
+    assert request.data is None
+
+    error_body = io.BytesIO(b'{"error":{"code":"unauthorized","message":"Token required"}}')
+    monkeypatch.setattr(
+        client_module,
+        'urlopen',
+        Mock(side_effect=HTTPError('http://core', 401, 'Unauthorized', {}, error_body)),
+    )
+    with pytest.raises(CoreClientError) as raised:
+        client._request_sync('/internal/events', {}, method='GET')
+    assert raised.value.code == 'unauthorized'
+
+
 def test_core_client_game_api(monkeypatch):
     request = AsyncMock(
         side_effect=[

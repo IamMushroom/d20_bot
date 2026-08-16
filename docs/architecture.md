@@ -99,6 +99,25 @@ outbox leasing и координация нескольких consumers пока
 - `POST /api/web-url` — адрес панели для конкретного чата.
 - `POST /api/events` — получение и подтверждение событий outbox.
 
+Для постепенной замены action-based API также доступны новые endpoints:
+
+- `GET /internal/events` — список ожидающих событий;
+- `POST /internal/events/{event_id}/ack` — подтверждение отдельного события.
+
+Ошибки новых `/internal/*` endpoints имеют единый контракт:
+
+```json
+{
+  "error": {
+    "code": "invalid_event_id",
+    "message": "Event ID must be a positive integer."
+  }
+}
+```
+
+Клиенты принимают решения по стабильному `code`, а `message` предназначен для диагностики.
+Старые `/api/*` endpoints сохраняются до поэтапного перевода всех методов `CoreClient`.
+
 Пример запроса ссылки:
 
 ```http
