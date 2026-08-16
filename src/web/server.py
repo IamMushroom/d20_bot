@@ -15,18 +15,17 @@ from auth import (
     InvalidRegistrationCode,
     LoginAlreadyExists,
     RateLimiter,
-    UnknownTelegramUser,
 )
 from game import ANNOUNCEMENT_TIMEZONES, game_message, valid_url
 from services import (
     CampaignService,
     OutboxService,
-    PlayerRegistrationStatus,
     SessionService,
     SessionStartStatus,
     SessionStopStatus,
 )
 from web.access import AdminAccessService, AdminIdentity
+from web.api import InternalApi
 from web.http import Request, Response, read_request, serialize_response
 from web.middleware import client_ip, cookie, session_cookie, trusted_proxy
 from web.router import Router
@@ -64,17 +63,27 @@ class AdminWebServer:
         self._internal_token = internal_token
         self._web_base_url = web_base_url
         self._server: asyncio.Server | None = None
+        self._api = InternalApi(
+            access,
+            campaigns,
+            sessions,
+            outbox,
+            identities,
+            rate_limiter,
+            internal_token,
+            web_base_url,
+        )
         self._router = Router()
         self._router.add('GET', '/health', self._health_route)
         self._router.add('GET', '/static/app.js', self._javascript_route)
-        self._router.add('POST', '/api/admin-link', self._admin_link_route)
-        self._router.add('POST', '/api/auth/registration', self._registration_route)
-        self._router.add('POST', '/api/game', self._game_route)
-        self._router.add('POST', '/api/game-url', self._game_url_route)
-        self._router.add('POST', '/api/session', self._session_route)
-        self._router.add('POST', '/api/role', self._role_route)
-        self._router.add('POST', '/api/web-url', self._web_url_route)
-        self._router.add('POST', '/api/events', self._events_route)
+        self._router.add('POST', '/api/admin-link', self._api.admin_link)
+        self._router.add('POST', '/api/auth/registration', self._api.registration)
+        self._router.add('POST', '/api/game', self._api.game)
+        self._router.add('POST', '/api/game-url', self._api.game_url)
+        self._router.add('POST', '/api/session', self._api.session)
+        self._router.add('POST', '/api/role', self._api.role)
+        self._router.add('POST', '/api/web-url', self._api.web_url)
+        self._router.add('POST', '/api/events', self._api.events)
 
     async def start(self, host: str, port: int) -> None:
         self._server = await asyncio.start_server(self._handle, host, port)
@@ -308,30 +317,6 @@ class AdminWebServer:
             APP_JS,
         )
 
-    async def _admin_link_route(self, request: Request):
-        return await self._admin_link(request.headers, request.form)
-
-    async def _registration_route(self, request: Request):
-        return await self._registration_api(request.headers, request.form)
-
-    async def _game_route(self, request: Request):
-        return await self._game_api(request.headers, request.form)
-
-    async def _game_url_route(self, request: Request):
-        return await self._game_url_api(request.headers, request.form)
-
-    async def _session_route(self, request: Request):
-        return await self._session_api(request.headers, request.form)
-
-    async def _role_route(self, request: Request):
-        return await self._role_api(request.headers, request.form)
-
-    async def _web_url_route(self, request: Request):
-        return await self._web_url_api(request.headers, request.form)
-
-    async def _events_route(self, request: Request):
-        return await self._events_api(request.headers, request.form)
-
     async def _local_session(
         self, user_id: int, headers: Mapping[str, str], remote_host: str | None
     ) -> tuple[HTTPStatus, dict[str, str], bytes]:
@@ -353,255 +338,6 @@ class AdminWebServer:
         self, session_id: str, headers: Mapping[str, str], remote_host: str | None
     ) -> str:
         return session_cookie(session_id, headers, remote_host)
-
-    async def _registration_api(
-        self, headers: Mapping[str, str], form: Mapping[str, list[str]]
-    ) -> tuple[HTTPStatus, dict[str, str], bytes]:
-        if not self._authorized(headers):
-            return self._json(HTTPStatus.UNAUTHORIZED, {'error': 'unauthorized'})
-        if self._identities is None:
-            return self._json(HTTPStatus.SERVICE_UNAVAILABLE, {'error': 'auth_disabled'})
-        try:
-            user_id = int(form['user_id'][0])
-        except KeyError, ValueError, IndexError:
-            return self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_request'})
-        limited = await self._rate_limit(
-            f'registration-code:{user_id}', limit=5, window=timedelta(minutes=15), json=True
-        )
-        if limited is not None:
-            return limited
-        try:
-            code = await self._identities.issue_registration_code(user_id)
-        except UnknownTelegramUser:
-            return self._json(HTTPStatus.NOT_FOUND, {'error': 'unknown_user'})
-        return self._json(HTTPStatus.OK, {'code': code})
-
-    async def _admin_link(
-        self, headers: Mapping[str, str], form: Mapping[str, list[str]]
-    ) -> tuple[HTTPStatus, dict[str, str], bytes]:
-        if not self._authorized(headers):
-            return self._json(HTTPStatus.UNAUTHORIZED, {'error': 'unauthorized'})
-        try:
-            chat_id = int(form['chat_id'][0])
-            user_id = int(form['user_id'][0])
-            chat_title = form.get('chat_title', [None])[0] or None
-        except KeyError, ValueError, IndexError:
-            return self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_request'})
-        if not await self._campaigns.is_master(chat_id, user_id):
-            return self._json(HTTPStatus.FORBIDDEN, {'error': 'forbidden'})
-        limited = await self._rate_limit(
-            f'admin-link:{user_id}', limit=5, window=timedelta(minutes=10), json=True
-        )
-        if limited is not None:
-            return limited
-        base_url = await self._sessions.get_web_base_url(chat_id) or self._web_base_url
-        if not base_url:
-            return self._json(HTTPStatus.CONFLICT, {'error': 'web_url_not_configured'})
-        token = await self._access.create_login(AdminIdentity(chat_id, user_id, chat_title))
-        return self._json(
-            HTTPStatus.OK,
-            {'url': f'{base_url.rstrip("/")}/login?token={token}'},
-        )
-
-    async def _game_api(
-        self, headers: Mapping[str, str], form: Mapping[str, list[str]]
-    ) -> tuple[HTTPStatus, dict[str, str], bytes]:
-        if not self._authorized(headers):
-            return self._json(HTTPStatus.UNAUTHORIZED, {'error': 'unauthorized'})
-        action = form.get('action', [''])[0]
-        try:
-            if action == 'get':
-                session = await self._sessions.get_planned(int(form['chat_id'][0]))
-                timezone_name = await self._sessions.get_announcement_timezone(
-                    int(form['chat_id'][0])
-                )
-                message = (
-                    game_message(session, timezone_name)
-                    if session
-                    else '📅 Следующая игра пока не назначена.'
-                )
-                return self._json(HTTPStatus.OK, {'message': message})
-            if action == 'schedule':
-                chat_id = int(form['chat_id'][0])
-                scheduled_at = datetime.fromisoformat(form['scheduled_at'][0])
-                chat_title = form.get('chat_title', [''])[0] or None
-                foundry_url = form.get('foundry_url', [''])[0]
-                if not foundry_url:
-                    foundry_url = await self._sessions.get_default_url(chat_id) or getenv(
-                        'D20_BOT_FOUNDRY_URL', ''
-                    )
-                if scheduled_at.tzinfo is None or not valid_url(foundry_url):
-                    raise ValueError
-                result = await self._sessions.schedule(
-                    chat_id, chat_title, scheduled_at.astimezone(UTC), foundry_url
-                )
-                return self._json(
-                    HTTPStatus.OK,
-                    {
-                        'session_id': result.session.id,
-                        'message': game_message(
-                            result.session,
-                            await self._sessions.get_announcement_timezone(chat_id),
-                        ),
-                        'previous_message_id': result.previous_message_id,
-                    },
-                )
-            if action == 'set_announcement':
-                await self._sessions.set_announcement(
-                    int(form['session_id'][0]), int(form['message_id'][0])
-                )
-                return self._json(HTTPStatus.OK, {'ok': True})
-        except KeyError, ValueError, IndexError:
-            return self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_request'})
-        return self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_action'})
-
-    async def _game_url_api(
-        self, headers: Mapping[str, str], form: Mapping[str, list[str]]
-    ) -> tuple[HTTPStatus, dict[str, str], bytes]:
-        if not self._authorized(headers):
-            return self._json(HTTPStatus.UNAUTHORIZED, {'error': 'unauthorized'})
-        try:
-            chat_id = int(form['chat_id'][0])
-            action = form.get('action', [''])[0]
-            if action == 'get':
-                url = await self._sessions.get_default_url(chat_id) or getenv(
-                    'D20_BOT_FOUNDRY_URL', ''
-                )
-                return self._json(HTTPStatus.OK, {'url': url if valid_url(url) else None})
-            if action == 'set':
-                foundry_url = form['foundry_url'][0]
-                if not valid_url(foundry_url):
-                    raise ValueError
-                await self._sessions.set_default_url(chat_id, foundry_url, datetime.now(UTC))
-                return self._json(HTTPStatus.OK, {'ok': True})
-        except KeyError, ValueError, IndexError:
-            return self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_request'})
-        return self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_action'})
-
-    async def _session_api(
-        self, headers: Mapping[str, str], form: Mapping[str, list[str]]
-    ) -> tuple[HTTPStatus, dict[str, str], bytes]:
-        if not self._authorized(headers):
-            return self._json(HTTPStatus.UNAUTHORIZED, {'error': 'unauthorized'})
-        try:
-            chat_id = int(form['chat_id'][0])
-            user_id = int(form['user_id'][0])
-            action = form.get('action', [''])[0]
-        except KeyError, ValueError, IndexError:
-            return self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_request'})
-        if action == 'start':
-            title = form.get('title', [''])[0].strip() or None
-            if title is not None and len(title) > 100:
-                return self._json(HTTPStatus.BAD_REQUEST, {'error': 'title_too_long'})
-            result = await self._sessions.start(chat_id, user_id, title)
-            if result.status is SessionStartStatus.FORBIDDEN:
-                return self._json(HTTPStatus.OK, {'status': 'forbidden'})
-            if result.status is SessionStartStatus.ALREADY_ACTIVE:
-                return self._json(HTTPStatus.OK, {'status': 'already_active'})
-            session = result.session
-            assert session is not None
-            return self._json(
-                HTTPStatus.OK,
-                {
-                    'status': 'started',
-                    'number': session.number,
-                    'title': session.title,
-                    'announcement_message_id': result.announcement_message_id,
-                },
-            )
-        if action == 'stop':
-            result = await self._sessions.stop(chat_id, user_id)
-            if result.status is SessionStopStatus.FORBIDDEN:
-                return self._json(HTTPStatus.OK, {'status': 'forbidden'})
-            if result.status is SessionStopStatus.NO_ACTIVE_SESSION:
-                return self._json(HTTPStatus.OK, {'status': 'no_active_session'})
-            session = result.session
-            assert session is not None
-            return self._json(HTTPStatus.OK, {'status': 'stopped', 'number': session.number})
-        return self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_action'})
-
-    async def _role_api(
-        self, headers: Mapping[str, str], form: Mapping[str, list[str]]
-    ) -> tuple[HTTPStatus, dict[str, str], bytes]:
-        if not self._authorized(headers):
-            return self._json(HTTPStatus.UNAUTHORIZED, {'error': 'unauthorized'})
-        try:
-            chat_id = int(form['chat_id'][0])
-            user_id = int(form['user_id'][0])
-            action = form.get('action', [''])[0]
-            chat_title = form.get('chat_title', [''])[0] or None
-        except KeyError, ValueError, IndexError:
-            return self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_request'})
-        if action == 'assign_master':
-            await self._campaigns.assign_master(chat_id, user_id, chat_title)
-            return self._json(HTTPStatus.OK, {'ok': True})
-        if action == 'register_player':
-            name = form.get('name', [''])[0].strip()
-            if not name or len(name) > 16:
-                return self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_name'})
-            result = await self._campaigns.register_player(chat_id, user_id, name, chat_title)
-            if result.status is PlayerRegistrationStatus.MASTER_CONFLICT:
-                return self._json(HTTPStatus.OK, {'status': 'master_conflict'})
-            character = result.character
-            assert character is not None
-            return self._json(HTTPStatus.OK, {'status': 'registered', 'name': character.name})
-        return self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_action'})
-
-    async def _web_url_api(
-        self, headers: Mapping[str, str], form: Mapping[str, list[str]]
-    ) -> tuple[HTTPStatus, dict[str, str], bytes]:
-        if not self._authorized(headers):
-            return self._json(HTTPStatus.UNAUTHORIZED, {'error': 'unauthorized'})
-        try:
-            chat_id = int(form['chat_id'][0])
-            action = form.get('action', [''])[0]
-            if action == 'get':
-                url = await self._sessions.get_web_base_url(chat_id) or self._web_base_url
-                return self._json(HTTPStatus.OK, {'url': url or None})
-            if action == 'set':
-                web_url = form['web_url'][0].rstrip('/')
-                if not valid_url(web_url):
-                    raise ValueError
-                await self._sessions.set_web_base_url(chat_id, web_url, datetime.now(UTC))
-                return self._json(HTTPStatus.OK, {'ok': True})
-        except KeyError, ValueError, IndexError:
-            return self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_request'})
-        return self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_action'})
-
-    async def _events_api(
-        self, headers: Mapping[str, str], form: Mapping[str, list[str]]
-    ) -> tuple[HTTPStatus, dict[str, str], bytes]:
-        if not self._authorized(headers):
-            return self._json(HTTPStatus.UNAUTHORIZED, {'error': 'unauthorized'})
-        action = form.get('action', [''])[0]
-        if action == 'get':
-            events = await self._outbox.pending()
-            return self._json(
-                HTTPStatus.OK,
-                {
-                    'events': [
-                        {'id': event.id, 'type': event.event_type, 'payload': event.payload}
-                        for event in events
-                    ]
-                },
-            )
-        if action == 'ack':
-            try:
-                event_id = int(form['event_id'][0])
-            except KeyError, ValueError, IndexError:
-                return self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_request'})
-            await self._outbox.acknowledge(event_id)
-            return self._json(HTTPStatus.OK, {'ok': True})
-        return self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_action'})
-
-    def _authorized(self, headers: Mapping[str, str]) -> bool:
-        authorization = headers.get('authorization', '')
-        supplied_token = (
-            authorization.removeprefix('Bearer ') if authorization.startswith('Bearer ') else ''
-        )
-        return bool(self._internal_token) and secrets.compare_digest(
-            supplied_token, self._internal_token
-        )
 
     def _client_ip(self, headers: Mapping[str, str], remote_host: str | None) -> str:
         return client_ip(headers, remote_host)

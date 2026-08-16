@@ -42,6 +42,8 @@
 
 - `WEB-ARCH-001` (этап 1): HTTP request/response, маршрутизация и trusted proxy/cookie middleware
   вынесены из `AdminWebServer` в отдельные модули с сохранением совместимости существующих handlers.
+- `WEB-ARCH-001` (этап 2): internal API endpoints сгруппированы в отдельном `InternalApi` и
+  подключены к Router; прежние URL и JSON-контракты сохранены.
 - `ARCH-004`: добавлены AST-тесты архитектурных границ между web, Telegram-командами, domain,
   repositories и database owner; запрещённые импорты теперь приводят к падению test suite.
 - `ARCH-003`: общие модели кампаний, пользователей, членства, персонажей, сессий и рекапов

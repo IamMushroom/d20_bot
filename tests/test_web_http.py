@@ -3,7 +3,7 @@ from http import HTTPStatus
 
 import pytest
 
-from web.http import Request, Response, serialize_response
+from web.http import MAX_REQUEST_SIZE, Request, Response, read_request, serialize_response
 from web.router import Router
 
 
@@ -17,10 +17,14 @@ def test_request_parses_target_and_keeps_legacy_tuple_compatibility():
 
 
 def test_response_serialization_adds_security_and_transport_headers():
-    raw = serialize_response(
-        Response(HTTPStatus.OK, {'Content-Type': 'application/json'}, b'{"ok": true}')
-    )
+    response = Response(HTTPStatus.OK, {'Content-Type': 'application/json'}, b'{"ok": true}')
+    raw = serialize_response(response)
 
+    assert response.as_tuple() == (
+        HTTPStatus.OK,
+        {'Content-Type': 'application/json'},
+        b'{"ok": true}',
+    )
     assert raw.startswith(b'HTTP/1.1 200 OK\r\n')
     assert b'Content-Length: 12\r\n' in raw
     assert b'Content-Type: application/json\r\n' in raw
@@ -50,3 +54,24 @@ def test_router_rejects_duplicate_routes():
     router.add('GET', '/', handler)
     with pytest.raises(ValueError, match='already registered'):
         router.add('GET', '/', handler)
+
+
+def test_request_reader_rejects_oversized_head_and_body():
+    async def scenario():
+        oversized_head = asyncio.StreamReader()
+        oversized_head.feed_data(
+            b'GET / HTTP/1.1\r\nX-Test: ' + b'x' * MAX_REQUEST_SIZE + b'\r\n\r\n'
+        )
+        oversized_head.feed_eof()
+        with pytest.raises(ValueError, match='too large'):
+            await read_request(oversized_head)
+
+        oversized_body = asyncio.StreamReader()
+        oversized_body.feed_data(
+            f'POST / HTTP/1.1\r\nContent-Length: {MAX_REQUEST_SIZE + 1}\r\n\r\n'.encode()
+        )
+        oversized_body.feed_eof()
+        with pytest.raises(ValueError, match='too large'):
+            await read_request(oversized_body)
+
+    asyncio.run(scenario())
