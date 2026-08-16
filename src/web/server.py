@@ -9,7 +9,7 @@ from auth import IdentityProvider, RateLimiter
 from database import Database
 from services import CampaignService, GameWorkflowService, OutboxService, SessionService
 from web.access import AdminAccessService
-from web.api import InternalApi
+from web.api import AuthApi, CampaignsApi, EventsApi, GamesApi, LegacyApi, SessionsApi
 from web.http import Request, Response, ResponseTuple, read_request, serialize_response
 from web.middleware import trusted_proxy
 from web.pages import PageHandlers
@@ -54,7 +54,7 @@ class AdminWebServer:
         web_base_url: str = '',
     ) -> None:
         self._server: asyncio.Server | None = None
-        self._api = InternalApi(
+        legacy = LegacyApi(
             access,
             campaigns,
             sessions,
@@ -64,6 +64,13 @@ class AdminWebServer:
             internal_token,
             web_base_url,
         )
+        auth_api = AuthApi(identities, rate_limiter, internal_token)
+        campaigns_api = CampaignsApi(
+            access, campaigns, sessions, rate_limiter, internal_token, web_base_url
+        )
+        events_api = EventsApi(outbox, internal_token)
+        games_api = GamesApi(sessions, internal_token)
+        sessions_api = SessionsApi(sessions, internal_token)
         self._pages = PageHandlers(
             access,
             campaigns,
@@ -75,72 +82,70 @@ class AdminWebServer:
         self._router = Router()
         self._router.add('GET', '/health', self._health_route)
         self._router.add('GET', '/static/app.js', self._javascript_route)
-        self._router.add('POST', '/api/admin-link', self._api.admin_link)
-        self._router.add('POST', '/api/auth/registration', self._api.registration)
-        self._router.add('POST', '/api/game', self._api.game)
-        self._router.add('POST', '/api/game-url', self._api.game_url)
-        self._router.add('POST', '/api/session', self._api.session)
-        self._router.add('POST', '/api/role', self._api.role)
-        self._router.add('POST', '/api/web-url', self._api.web_url)
-        self._router.add('POST', '/api/events', self._api.events)
-        self._router.add('GET', '/internal/events', self._api.list_events)
-        self._router.add('POST', '/internal/events/{event_id}/ack', self._api.acknowledge_event)
-        self._router.add('GET', '/internal/campaigns/{chat_id}/game', self._api.get_campaign_game)
-        self._router.add(
-            'PUT', '/internal/campaigns/{chat_id}/game', self._api.schedule_campaign_game
-        )
+        self._router.add('POST', '/api/admin-link', legacy.admin_link)
+        self._router.add('POST', '/api/auth/registration', legacy.registration)
+        self._router.add('POST', '/api/game', legacy.game)
+        self._router.add('POST', '/api/game-url', legacy.game_url)
+        self._router.add('POST', '/api/session', legacy.session)
+        self._router.add('POST', '/api/role', legacy.role)
+        self._router.add('POST', '/api/web-url', legacy.web_url)
+        self._router.add('POST', '/api/events', legacy.events)
+        self._router.add('GET', '/internal/events', events_api.list_events)
+        self._router.add('POST', '/internal/events/{event_id}/ack', events_api.acknowledge_event)
+        self._router.add('GET', '/internal/campaigns/{chat_id}/game', games_api.get_game)
+        self._router.add('PUT', '/internal/campaigns/{chat_id}/game', games_api.schedule_game)
         self._router.add(
             'POST',
             '/internal/sessions/{session_id}/announcement',
-            self._api.set_session_announcement,
+            games_api.set_announcement,
         )
         self._router.add(
             'POST',
             '/internal/campaigns/{chat_id}/sessions/start',
-            self._api.start_campaign_session,
+            sessions_api.start,
         )
         self._router.add(
             'POST',
             '/internal/campaigns/{chat_id}/sessions/stop',
-            self._api.stop_campaign_session,
+            sessions_api.stop,
         )
         self._router.add(
-            'POST', '/internal/auth/registration-codes', self._api.create_registration_code
+            'POST', '/internal/auth/registration-codes', auth_api.create_registration_code
         )
         self._router.add(
             'POST',
             '/internal/campaigns/{chat_id}/admin-links',
-            self._api.create_admin_link,
+            campaigns_api.create_admin_link,
         )
         self._router.add(
             'PUT',
             '/internal/campaigns/{chat_id}/master',
-            self._api.assign_campaign_master,
+            campaigns_api.assign_master,
         )
         self._router.add(
             'POST',
             '/internal/campaigns/{chat_id}/players',
-            self._api.register_campaign_player,
+            campaigns_api.register_player,
         )
         self._router.add(
             'GET',
             '/internal/campaigns/{chat_id}/foundry-url',
-            self._api.get_foundry_url,
+            games_api.get_foundry_url,
         )
         self._router.add(
             'PUT',
             '/internal/campaigns/{chat_id}/foundry-url',
-            self._api.set_foundry_url,
+            games_api.set_foundry_url,
         )
         self._router.add(
             'GET',
             '/internal/campaigns/{chat_id}/web-url',
-            self._api.get_campaign_web_url,
+            campaigns_api.get_web_url,
         )
         self._router.add(
             'PUT',
             '/internal/campaigns/{chat_id}/web-url',
-            self._api.set_campaign_web_url,
+            campaigns_api.set_web_url,
         )
         for method, path in PAGE_ROUTES:
             self._router.add(method, path, self._pages.dispatch)

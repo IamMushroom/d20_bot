@@ -44,6 +44,9 @@
 
 ### Changed
 
+- `ARCH-006`: внутренний HTTP API разделён по capabilities аутентификации, кампаний, игр,
+  сессий и outbox; deprecated action-based `/api/*` физически изолирован в compatibility module,
+  а общая авторизация, валидация path и error serialization больше не дублируются.
 - `ARCH-005`: операции назначения мастера, регистрации игрока и передачи роли мастера теперь
   атомарны; failure-injection тесты подтверждают rollback campaign, membership, user и character
   записей при ошибке в середине use case.

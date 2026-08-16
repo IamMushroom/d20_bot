@@ -90,7 +90,8 @@ outbox leasing и координация нескольких consumers пока
 
 ## Внутренний API
 
-Legacy action-based API пока предоставляет методы:
+Legacy action-based API физически изолирован в `web/api/legacy.py`, помечен deprecated и пока
+предоставляет методы для совместимости:
 
 - `POST /api/admin-link` — одноразовая ссылка мастера;
 - `POST /api/game` — чтение и изменение расписания, сохранение ID объявления;
