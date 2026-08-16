@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+- Архитектурные тесты усилены запретами `repositories → services/presentation`,
+  `services → web/commands/telegram` и взаимных импортов между `web/api` и `web/pages`.
+
 - `ARCH-010`: каноническим источником мастера стала единственная membership с ролью `master`;
   удалено дублирующее поле `campaigns.master_user_id`, добавлен уникальный partial index, а
   назначение и передача роли окончательно перенесены из repository в application service.

@@ -220,6 +220,11 @@ HTTP handler → service → repository → Database → SQLite
 SQL остаётся в репозиториях, бизнес-сценарии — в сервисах, транспортная проверка и разбор
 запросов — в HTTP-слое. Подробнее устройство хранения описано в [database.md](database.md).
 
+AST architecture tests закрепляют направление зависимостей: repositories не импортируют
+application/presentation layers, services не зависят от web, Telegram или commands, а `web/api`
+и `web/pages` не импортируют друг друга. Оба HTTP capability-набора связываются только в Router
+на уровне composition web-сервера.
+
 ## Текущее состояние миграции
 
 Уже отделены:

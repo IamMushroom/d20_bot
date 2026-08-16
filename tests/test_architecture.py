@@ -54,10 +54,10 @@ def test_domain_does_not_depend_on_outer_layers() -> None:
     )
 
 
-def test_repositories_do_not_depend_on_presentations() -> None:
+def test_repositories_do_not_depend_on_application_or_presentations() -> None:
     assert_no_imports(
         python_files(SRC / 'database' / 'repositories'),
-        {'commands', 'telegram', 'web'},
+        {'commands', 'services', 'telegram', 'web'},
     )
 
 
@@ -83,3 +83,15 @@ def test_services_do_not_construct_repositories() -> None:
     assert not violations, 'Repositories must be composed outside services:\n' + '\n'.join(
         violations
     )
+
+
+def test_services_do_not_depend_on_presentations() -> None:
+    assert_no_imports(
+        python_files(SRC / 'services'),
+        {'commands', 'telegram', 'web'},
+    )
+
+
+def test_web_api_and_pages_do_not_depend_on_each_other() -> None:
+    assert_no_imports(python_files(SRC / 'web' / 'api'), {'web.pages'})
+    assert_no_imports(python_files(SRC / 'web' / 'pages'), {'web.api'})
