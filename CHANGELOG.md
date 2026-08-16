@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+- `ARCH-013`: добавлен ADR по identity кампании: рекомендована явная
+  `telegram_campaign_bindings`, определены cardinality, campaign-oriented internal API,
+  Bot-side resolution, влияние на web/outbox и backward-compatible порядок будущей миграции;
+  production schema и код не изменялись.
+
 - `ARCH-012`: outbox-событие `game_scheduled` теперь содержит структурированные данные игры
   вместо готового Telegram-текста; форматирование всех уведомлений о расписании и lifecycle
   сессий принадлежит connected-consumer бота, а схемы событий и at-least-once semantics

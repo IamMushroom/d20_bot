@@ -49,6 +49,7 @@ docker compose --profile platform up --build -d
 - [Команды и синтаксис кубов](docs/commands.md)
 - [Установка, конфигурация и эксплуатация](docs/deployment.md)
 - [Архитектура Bot/Core](docs/architecture.md)
+- [ADR: identity кампании и Telegram binding](docs/adr/001-campaign-identity.md)
 - [Контракт transactional outbox](docs/outbox.md)
 - [База данных и репозитории](docs/database.md)
 - [Web-аутентификация и Telegram Login](docs/authentication.md)

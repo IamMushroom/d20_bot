@@ -120,6 +120,11 @@ locator, глобального registry или DI-фреймворка.
 master-membership на кампанию. `CampaignService` оркестрирует назначение и передачу роли внутри
 application-транзакции; repositories изменяют только принадлежащие им persistence concerns.
 
+Текущее поле `Campaign.chat_id` и chat-based application API остаются известным переходным долгом.
+Целевая identity и безопасный порядок будущей миграции определены в
+[ADR-001](adr/001-campaign-identity.md): application использует `campaign_id`, а Telegram `chat_id`
+разрешается отдельным connected adapter. Саму миграцию ADR не выполняет.
+
 ## Внутренний API
 
 Core предоставляет единственный operation-oriented API:
