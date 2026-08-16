@@ -44,6 +44,9 @@
 
 ### Changed
 
+- `ARCH-007`: HTML routes теперь напрямую связываются с конкретными page handlers в основном
+  `Router`; вложенный `PageHandlers.dispatch()` удалён, а общие session, CSRF и campaign access
+  проверки сохранены в переиспользуемых helpers.
 - `ARCH-006`: внутренний HTTP API разделён по capabilities аутентификации, кампаний, игр,
   сессий и outbox; deprecated action-based `/api/*` физически изолирован в compatibility module,
   а общая авторизация, валидация path и error serialization больше не дублируются.

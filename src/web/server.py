@@ -18,27 +18,6 @@ from web.views import page_response
 
 APP_JS = files('web').joinpath('static/app.js').read_bytes()
 
-PAGE_ROUTES = (
-    ('GET', '/'),
-    ('GET', '/campaigns'),
-    ('GET', '/login'),
-    ('GET', '/register'),
-    ('GET', '/sessions'),
-    ('GET', '/settings'),
-    ('POST', '/login'),
-    ('POST', '/logout'),
-    ('POST', '/master/transfer'),
-    ('POST', '/player/invite'),
-    ('POST', '/player/remove'),
-    ('POST', '/player/rename'),
-    ('POST', '/register'),
-    ('POST', '/schedule'),
-    ('POST', '/session/start'),
-    ('POST', '/session/stop'),
-    ('POST', '/sessions/revoke'),
-    ('POST', '/settings'),
-)
-
 
 class AdminWebServer:
     def __init__(
@@ -147,8 +126,28 @@ class AdminWebServer:
             '/internal/campaigns/{chat_id}/web-url',
             campaigns_api.set_web_url,
         )
-        for method, path in PAGE_ROUTES:
-            self._router.add(method, path, self._pages.dispatch)
+        page_routes = (
+            ('GET', '/', self._pages.dashboard),
+            ('GET', '/campaigns', self._pages.campaigns),
+            ('GET', '/login', self._pages.login_link),
+            ('GET', '/register', self._pages.register_page),
+            ('GET', '/sessions', self._pages.sessions),
+            ('GET', '/settings', self._pages.settings),
+            ('POST', '/login', self._pages.login),
+            ('POST', '/logout', self._pages.logout),
+            ('POST', '/master/transfer', self._pages.transfer_master),
+            ('POST', '/player/invite', self._pages.invite_player),
+            ('POST', '/player/remove', self._pages.remove_player),
+            ('POST', '/player/rename', self._pages.rename_player),
+            ('POST', '/register', self._pages.register),
+            ('POST', '/schedule', self._pages.schedule),
+            ('POST', '/session/start', self._pages.start_session),
+            ('POST', '/session/stop', self._pages.stop_session),
+            ('POST', '/sessions/revoke', self._pages.revoke_session),
+            ('POST', '/settings', self._pages.save_settings),
+        )
+        for method, path, handler in page_routes:
+            self._router.add(method, path, handler)
 
     async def start(self, host: str, port: int) -> None:
         self._server = await asyncio.start_server(self._handle, host, port)
@@ -191,7 +190,7 @@ class AdminWebServer:
             return routed
         if self._router.supports_path(request.path):
             return page_response(HTTPStatus.METHOD_NOT_ALLOWED, 'Метод не поддерживается.')
-        return await self._pages.dispatch(request)
+        return page_response(HTTPStatus.NOT_FOUND, 'Страница не найдена.')
 
     async def _route(
         self,
