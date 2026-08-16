@@ -57,7 +57,7 @@ def test_game_workflow_commits_state_and_event_together(tmp_path):
         outbox = OutboxService(database)
         workflow = GameWorkflowService(database, sessions, outbox)
 
-        result = await workflow.schedule(
+        result = await workflow.schedule_and_notify(
             -100,
             'Campaign',
             datetime.fromisoformat('2026-08-20T19:00:00+00:00'),
@@ -68,6 +68,7 @@ def test_game_workflow_commits_state_and_event_together(tmp_path):
         return result, events
 
     result, events = asyncio.run(scenario())
+    assert len(events) == 1
     assert events[0].event_type == 'game_scheduled'
     assert events[0].payload['session_id'] == result.session.id
 
@@ -81,14 +82,14 @@ def test_outbox_failure_rolls_back_session_state(tmp_path, monkeypatch):
         outbox = OutboxService(database)
         workflow = GameWorkflowService(database, sessions, outbox)
         await campaigns.assign_master(-100, 7, 'Campaign')
-        forbidden = await workflow.start(-100, 8, None)
+        forbidden = await workflow.start_and_notify(-100, 8, None)
         assert forbidden.status is SessionStartStatus.FORBIDDEN
         assert await outbox.pending() == []
         await sessions.start(-100, 7, 'Tower')
         monkeypatch.setattr(outbox, 'publish', AsyncMock(side_effect=RuntimeError('outbox failed')))
 
         with pytest.raises(RuntimeError, match='outbox failed'):
-            await workflow.stop(-100, 7)
+            await workflow.stop_and_notify(-100, 7)
 
         active = await sessions.get_active(-100)
         pending = await outbox.pending()
@@ -98,6 +99,31 @@ def test_outbox_failure_rolls_back_session_state(tmp_path, monkeypatch):
     active, pending = asyncio.run(scenario())
     assert active is not None and active.finished_at is None
     assert pending == []
+
+
+def test_session_service_mutations_do_not_publish_events(tmp_path):
+    async def scenario():
+        database = await SQLiteDatabase.connect(str(tmp_path / 'mutation-only.sqlite3'))
+        await apply_migrations(database, MIGRATIONS)
+        campaigns = CampaignService(database)
+        sessions = SessionService(database)
+        outbox = OutboxService(database)
+        await campaigns.assign_master(-100, 7, 'Campaign')
+
+        await sessions.schedule(
+            -100,
+            'Campaign',
+            datetime.fromisoformat('2026-08-20T19:00:00+00:00'),
+            'https://foundry.example',
+        )
+        await sessions.start(-100, 7, 'Tower')
+        await sessions.stop(-100, 7)
+
+        events = await outbox.pending()
+        await database.close()
+        return events
+
+    assert asyncio.run(scenario()) == []
 
 
 def test_processes_all_outbox_event_types():

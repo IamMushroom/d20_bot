@@ -356,7 +356,7 @@ class PageHandlers:
             return page_response(HTTPStatus.BAD_REQUEST, 'Неверные дата или URL.')
         if not valid_url(foundry_url):
             return page_response(HTTPStatus.BAD_REQUEST, 'Неверный Foundry URL.')
-        await self._workflows.schedule(
+        await self._workflows.schedule_and_notify(
             identity.chat_id, identity.chat_title, scheduled_at, foundry_url
         )
         return HTTPStatus.SEE_OTHER, {'Location': f'/?campaign={identity.chat_id}'}, b''
@@ -412,7 +412,7 @@ class PageHandlers:
         title = form.get('title', [''])[0].strip() or None
         if title is not None and len(title) > 100:
             return page_response(HTTPStatus.BAD_REQUEST, 'Название слишком длинное.')
-        result = await self._workflows.start(identity.chat_id, identity.user_id, title)
+        result = await self._workflows.start_and_notify(identity.chat_id, identity.user_id, title)
         if result.status is SessionStartStatus.FORBIDDEN:
             return page_response(HTTPStatus.FORBIDDEN, 'Доступ к кампании отозван.')
         if result.status is SessionStartStatus.ALREADY_ACTIVE:
@@ -424,7 +424,7 @@ class PageHandlers:
     async def _stop_session(
         self, identity: AdminIdentity
     ) -> tuple[HTTPStatus, dict[str, str], bytes]:
-        result = await self._workflows.stop(identity.chat_id, identity.user_id)
+        result = await self._workflows.stop_and_notify(identity.chat_id, identity.user_id)
         if result.status is SessionStopStatus.FORBIDDEN:
             return page_response(HTTPStatus.FORBIDDEN, 'Доступ к кампании отозван.')
         if result.status is SessionStopStatus.NO_ACTIVE_SESSION:

@@ -24,7 +24,7 @@ class GameWorkflowService:
         self._sessions = sessions
         self._outbox = outbox
 
-    async def schedule(
+    async def schedule_and_notify(
         self,
         chat_id: int,
         chat_title: str | None,
@@ -45,7 +45,7 @@ class GameWorkflowService:
             )
             return result
 
-    async def start(self, chat_id: int, user_id: int, title: str | None) -> SessionStart:
+    async def start_and_notify(self, chat_id: int, user_id: int, title: str | None) -> SessionStart:
         async with self._database.transaction():
             result = await self._sessions.start(chat_id, user_id, title)
             if result.status is not SessionStartStatus.STARTED:
@@ -63,7 +63,7 @@ class GameWorkflowService:
             )
             return result
 
-    async def stop(self, chat_id: int, user_id: int) -> SessionStop:
+    async def stop_and_notify(self, chat_id: int, user_id: int) -> SessionStop:
         async with self._database.transaction():
             result = await self._sessions.stop(chat_id, user_id)
             if result.status is not SessionStopStatus.STOPPED:

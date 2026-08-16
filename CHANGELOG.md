@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+- `ARCH-008`: application API явно разделяет mutation-only операции `SessionService` и web-workflows
+  `GameWorkflowService.*_and_notify`; workflow владеет общей транзакцией состояния и единственного
+  outbox-события, а bot/internal API не создаёт дублирующих уведомлений.
+
 - Документация архитектуры и базы данных сверена с knowledge graph: актуализированы границы
   Bot/Core, operation-oriented internal API, lifecycle `CoreRuntime`, domain-модели и миграции
   web-аутентификации.
