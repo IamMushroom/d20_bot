@@ -5,7 +5,13 @@ from pathlib import Path
 import pytest
 
 from database import SQLiteDatabase, apply_migrations
-from database.repositories import SessionRepository
+from database.repositories import (
+    CampaignRepository,
+    CharacterRepository,
+    GameConfigRepository,
+    MembershipRepository,
+    SessionRepository,
+)
 from services import (
     CampaignService,
     PlayerRegistrationStatus,
@@ -23,10 +29,28 @@ async def open_database(tmp_path, name: str):
     return database
 
 
+def campaign_service(database):
+    return CampaignService(
+        database,
+        CampaignRepository(database),
+        CharacterRepository(database),
+        MembershipRepository(database),
+    )
+
+
+def session_service(database):
+    return SessionService(
+        CampaignRepository(database),
+        SessionRepository(database),
+        GameConfigRepository(database),
+        MembershipRepository(database),
+    )
+
+
 def test_campaign_service_assigns_roles_and_updates_character(tmp_path):
     async def scenario():
         database = await open_database(tmp_path, 'campaign-service.sqlite3')
-        service = CampaignService(database)
+        service = campaign_service(database)
 
         campaign = await service.assign_master(-100, 7, 'Campaign')
         master_registration = await service.register_player(-100, 7, 'Мастер')
@@ -49,7 +73,7 @@ def test_campaign_service_assigns_roles_and_updates_character(tmp_path):
 def test_campaign_roles_are_scoped_to_each_campaign(tmp_path):
     async def scenario():
         database = await open_database(tmp_path, 'campaign-memberships.sqlite3')
-        service = CampaignService(database)
+        service = campaign_service(database)
         await service.assign_master(-100, 7, 'First')
         await service.register_player(-100, 8, 'Bob')
         await service.assign_master(-200, 8, 'Second')
@@ -86,7 +110,7 @@ def test_campaign_roles_are_scoped_to_each_campaign(tmp_path):
 def test_campaign_service_renames_and_removes_player_without_deleting_character(tmp_path):
     async def scenario():
         database = await open_database(tmp_path, 'campaign-player-management.sqlite3')
-        service = CampaignService(database)
+        service = campaign_service(database)
         await service.assign_master(-100, 7, 'Campaign')
         await service.register_player(-100, 8, 'Tilly')
         renamed = await service.rename_player(-100, 8, 'Tilly Fang')
@@ -112,7 +136,7 @@ def test_campaign_service_renames_and_removes_player_without_deleting_character(
 def test_campaign_service_transfers_master_and_keeps_previous_master_as_player(tmp_path):
     async def scenario():
         database = await open_database(tmp_path, 'campaign-master-transfer.sqlite3')
-        service = CampaignService(database)
+        service = campaign_service(database)
         await service.assign_master(-100, 7, 'Campaign')
         await service.register_player(-100, 8, 'Tilly')
         transferred = await service.transfer_master(-100, 7, 8)
@@ -133,7 +157,7 @@ def test_campaign_service_transfers_master_and_keeps_previous_master_as_player(t
 def test_campaign_service_rolls_back_player_registration(tmp_path, monkeypatch):
     async def scenario():
         database = await open_database(tmp_path, 'campaign-player-rollback.sqlite3')
-        service = CampaignService(database)
+        service = campaign_service(database)
 
         async def fail_character_registration(*_args):
             raise RuntimeError('injected character failure')
@@ -156,7 +180,7 @@ def test_campaign_service_rolls_back_player_registration(tmp_path, monkeypatch):
 def test_campaign_service_rolls_back_master_transfer(tmp_path, monkeypatch):
     async def scenario():
         database = await open_database(tmp_path, 'campaign-transfer-rollback.sqlite3')
-        service = CampaignService(database)
+        service = campaign_service(database)
         await service.assign_master(-100, 7, 'Campaign')
         await service.register_player(-100, 8, 'Tilly')
 
@@ -183,7 +207,7 @@ def test_campaign_service_rolls_back_master_transfer(tmp_path, monkeypatch):
 def test_campaign_service_rolls_back_master_assignment(tmp_path, monkeypatch):
     async def scenario():
         database = await open_database(tmp_path, 'campaign-master-rollback.sqlite3')
-        service = CampaignService(database)
+        service = campaign_service(database)
         original_fetch_one = database.fetch_one
 
         async def fail_campaign_update(query, parameters=()):
@@ -207,7 +231,7 @@ def test_campaign_service_rolls_back_master_assignment(tmp_path, monkeypatch):
 def test_session_service_schedules_and_replaces_announcement(tmp_path):
     async def scenario():
         database = await open_database(tmp_path, 'schedule-service.sqlite3')
-        service = SessionService(database)
+        service = session_service(database)
         scheduled_at = datetime(2026, 7, 20, 16, tzinfo=UTC)
 
         missing = await service.get_planned(-100)
@@ -235,7 +259,7 @@ def test_session_service_schedules_and_replaces_announcement(tmp_path):
 def test_session_service_stores_default_url(tmp_path):
     async def scenario():
         database = await open_database(tmp_path, 'config-service.sqlite3')
-        service = SessionService(database)
+        service = session_service(database)
         before = await service.get_default_url(-100)
         await service.set_default_url(
             -100, 'https://foundry.example', datetime(2026, 7, 15, 12, tzinfo=UTC)
@@ -250,8 +274,8 @@ def test_session_service_stores_default_url(tmp_path):
 def test_session_service_validates_master_and_lifecycle(tmp_path):
     async def scenario():
         database = await open_database(tmp_path, 'lifecycle-service.sqlite3')
-        campaigns = CampaignService(database)
-        sessions = SessionService(database)
+        campaigns = campaign_service(database)
+        sessions = session_service(database)
 
         forbidden_start = await sessions.start(-100, 8, None)
         forbidden_stop = await sessions.stop(-100, 8)
@@ -298,11 +322,11 @@ def test_session_start_is_safe_across_database_connections(tmp_path):
         first_database = await SQLiteDatabase.connect(str(path))
         await apply_migrations(first_database, MIGRATIONS)
         second_database = await SQLiteDatabase.connect(str(path))
-        await CampaignService(first_database).assign_master(-100, 7, 'Campaign')
+        await campaign_service(first_database).assign_master(-100, 7, 'Campaign')
 
         results = await asyncio.gather(
-            SessionService(first_database).start(-100, 7, 'First'),
-            SessionService(second_database).start(-100, 7, 'Second'),
+            session_service(first_database).start(-100, 7, 'First'),
+            session_service(second_database).start(-100, 7, 'Second'),
         )
         rows = await first_database.fetch_all(
             'SELECT * FROM sessions WHERE started_at IS NOT NULL AND finished_at IS NULL'

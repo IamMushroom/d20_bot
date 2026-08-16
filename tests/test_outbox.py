@@ -13,6 +13,14 @@ import core.events as event_module
 from core import CoreClient, CoreClientError, CoreEvent
 from core.events import poll_events, process_event
 from database import SQLiteDatabase, apply_migrations
+from database.repositories import (
+    CampaignRepository,
+    CharacterRepository,
+    GameConfigRepository,
+    MembershipRepository,
+    OutboxRepository,
+    SessionRepository,
+)
 from services import (
     CampaignService,
     GameWorkflowService,
@@ -26,17 +34,39 @@ from web.session_store import SQLiteWebSessionStore
 MIGRATIONS = Path(__file__).resolve().parent.parent / 'migrations'
 
 
+def campaign_service(database):
+    return CampaignService(
+        database,
+        CampaignRepository(database),
+        CharacterRepository(database),
+        MembershipRepository(database),
+    )
+
+
+def session_service(database):
+    return SessionService(
+        CampaignRepository(database),
+        SessionRepository(database),
+        GameConfigRepository(database),
+        MembershipRepository(database),
+    )
+
+
+def outbox_service(database):
+    return OutboxService(OutboxRepository(database))
+
+
 def test_outbox_persists_until_acknowledged(tmp_path):
     async def scenario():
         path = str(tmp_path / 'outbox.sqlite3')
         database = await SQLiteDatabase.connect(path)
         await apply_migrations(database, MIGRATIONS)
-        outbox = OutboxService(database)
+        outbox = outbox_service(database)
         event_id = await outbox.publish('session_stopped', {'chat_id': -100, 'number': 3})
         await database.close()
 
         database = await SQLiteDatabase.connect(path)
-        outbox = OutboxService(database)
+        outbox = outbox_service(database)
         pending = await outbox.pending()
         await outbox.acknowledge(event_id)
         delivered = await outbox.pending()
@@ -53,8 +83,8 @@ def test_game_workflow_commits_state_and_event_together(tmp_path):
     async def scenario():
         database = await SQLiteDatabase.connect(str(tmp_path / 'workflow.sqlite3'))
         await apply_migrations(database, MIGRATIONS)
-        sessions = SessionService(database)
-        outbox = OutboxService(database)
+        sessions = session_service(database)
+        outbox = outbox_service(database)
         workflow = GameWorkflowService(database, sessions, outbox)
 
         result = await workflow.schedule_and_notify(
@@ -77,9 +107,9 @@ def test_outbox_failure_rolls_back_session_state(tmp_path, monkeypatch):
     async def scenario():
         database = await SQLiteDatabase.connect(str(tmp_path / 'rollback.sqlite3'))
         await apply_migrations(database, MIGRATIONS)
-        campaigns = CampaignService(database)
-        sessions = SessionService(database)
-        outbox = OutboxService(database)
+        campaigns = campaign_service(database)
+        sessions = session_service(database)
+        outbox = outbox_service(database)
         workflow = GameWorkflowService(database, sessions, outbox)
         await campaigns.assign_master(-100, 7, 'Campaign')
         forbidden = await workflow.start_and_notify(-100, 8, None)
@@ -105,9 +135,9 @@ def test_session_service_mutations_do_not_publish_events(tmp_path):
     async def scenario():
         database = await SQLiteDatabase.connect(str(tmp_path / 'mutation-only.sqlite3'))
         await apply_migrations(database, MIGRATIONS)
-        campaigns = CampaignService(database)
-        sessions = SessionService(database)
-        outbox = OutboxService(database)
+        campaigns = campaign_service(database)
+        sessions = session_service(database)
+        outbox = outbox_service(database)
         await campaigns.assign_master(-100, 7, 'Campaign')
 
         await sessions.schedule(
@@ -280,12 +310,12 @@ def test_internal_events_api(tmp_path):
     async def scenario():
         database = await SQLiteDatabase.connect(str(tmp_path / 'events-api.sqlite3'))
         await apply_migrations(database, MIGRATIONS)
-        outbox = OutboxService(database)
+        outbox = outbox_service(database)
         server = AdminWebServer(
-            database,
+            GameWorkflowService(database, session_service(database), outbox),
             AdminAccessService(SQLiteWebSessionStore(database)),
-            CampaignService(database),
-            SessionService(database),
+            campaign_service(database),
+            session_service(database),
             outbox,
             internal_token='secret',
         )

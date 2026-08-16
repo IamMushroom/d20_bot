@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+- `ARCH-009`: создание concrete repositories и `GameWorkflowService` перенесено в явный composition
+  root `CoreRuntime`; сервисы теперь получают все persistence-зависимости через конструкторы, а
+  архитектурный тест запрещает возвращать скрытое создание repositories в service layer.
+
 - `ARCH-008`: application API явно разделяет mutation-only операции `SessionService` и web-workflows
   `GameWorkflowService.*_and_notify`; workflow владеет общей транзакцией состояния и единственного
   outbox-события, а bot/internal API не создаёт дублирующих уведомлений.

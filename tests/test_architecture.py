@@ -66,3 +66,20 @@ def test_telegram_bot_does_not_own_database() -> None:
         python_files(SRC / 'run.py', SRC / 'commands'),
         {'database', 'sqlite3'},
     )
+
+
+def test_services_do_not_construct_repositories() -> None:
+    violations: list[str] = []
+    for path in python_files(SRC / 'services'):
+        tree = ast.parse(path.read_text(encoding='utf-8'), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            function = node.func
+            name = function.id if isinstance(function, ast.Name) else None
+            if name is not None and name.endswith('Repository'):
+                relative = path.relative_to(PROJECT_ROOT)
+                violations.append(f'{relative}:{node.lineno} constructs {name}')
+    assert not violations, 'Repositories must be composed outside services:\n' + '\n'.join(
+        violations
+    )

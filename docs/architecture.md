@@ -96,6 +96,12 @@ Core не получает `D20_BOT_TG_TOKEN` и не вызывает Telegram 
 Текущая deployment-модель предполагает ровно один экземпляр Core и один экземпляр Bot;
 outbox leasing и координация нескольких consumers пока не реализованы.
 
+`CoreRuntime` является явным composition root Core. Он создаёт concrete repositories, передаёт
+их сервисам через конструкторы, собирает application workflows и только затем создаёт web-сервер.
+Сервисы не создают repositories самостоятельно, а `AdminWebServer` получает уже собранный
+`GameWorkflowService`. Для этой сборки используются обычные Python-конструкторы без service
+locator, глобального registry или DI-фреймворка.
+
 ## Внутренний API
 
 Legacy action-based API физически изолирован в `web/api/legacy.py`, помечен deprecated и пока

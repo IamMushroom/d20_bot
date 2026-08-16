@@ -25,11 +25,17 @@ class CampaignRoster:
 
 
 class CampaignService:
-    def __init__(self, database: Database):
+    def __init__(
+        self,
+        database: Database,
+        campaigns: CampaignRepository,
+        characters: CharacterRepository,
+        memberships: MembershipRepository,
+    ) -> None:
         self._database = database
-        self._campaigns = CampaignRepository(database)
-        self._characters = CharacterRepository(database)
-        self._memberships = MembershipRepository(database)
+        self._campaigns = campaigns
+        self._characters = characters
+        self._memberships = memberships
 
     async def assign_master(self, chat_id: int, user_id: int, title: str | None = None) -> Campaign:
         async with self._database.transaction():

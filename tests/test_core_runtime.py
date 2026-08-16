@@ -25,6 +25,7 @@ def test_core_runtime_owns_database_services_and_web_server(tmp_path):
         assert runtime.web_base_url == 'https://d20.example'
         await runtime.campaigns.assign_master(-100, 7, 'Campaign')
         assert await runtime.campaigns.is_master(-100, 7)
+        assert runtime.web_server._pages._workflows is runtime.workflows
         database = runtime.database
         await runtime.close()
         return database

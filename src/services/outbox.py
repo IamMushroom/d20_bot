@@ -2,7 +2,6 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from database.connection import Database
 from database.repositories import OutboxRepository
 
 
@@ -14,8 +13,8 @@ class OutboxEvent:
 
 
 class OutboxService:
-    def __init__(self, database: Database):
-        self._events = OutboxRepository(database)
+    def __init__(self, events: OutboxRepository) -> None:
+        self._events = events
 
     async def publish(self, event_type: str, payload: dict[str, object]) -> int:
         return await self._events.add(

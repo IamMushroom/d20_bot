@@ -6,7 +6,6 @@ from http import HTTPStatus
 from importlib.resources import files
 
 from auth import IdentityProvider, RateLimiter
-from database import Database
 from services import CampaignService, GameWorkflowService, OutboxService, SessionService
 from web.access import AdminAccessService
 from web.api import AuthApi, CampaignsApi, EventsApi, GamesApi, LegacyApi, SessionsApi
@@ -22,7 +21,7 @@ APP_JS = files('web').joinpath('static/app.js').read_bytes()
 class AdminWebServer:
     def __init__(
         self,
-        database: Database,
+        workflows: GameWorkflowService,
         access: AdminAccessService,
         campaigns: CampaignService,
         sessions: SessionService,
@@ -54,7 +53,7 @@ class AdminWebServer:
             access,
             campaigns,
             sessions,
-            GameWorkflowService(database, sessions, outbox),
+            workflows,
             identities,
             rate_limiter,
         )

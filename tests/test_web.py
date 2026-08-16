@@ -12,19 +12,51 @@ from auth import RateLimitResult, SQLiteLocalIdentityProvider
 from commands.admin_commands import CORE_CLIENT_KEY, admin, web_register, web_url
 from core import CoreClientError
 from database import SQLiteDatabase, apply_migrations
-from services import CampaignService, SessionService
-from web import AdminAccessService, AdminWebServer
+from database.repositories import (
+    CampaignRepository,
+    CharacterRepository,
+    GameConfigRepository,
+    MembershipRepository,
+    SessionRepository,
+)
+from services import CampaignService, GameWorkflowService, SessionService
+from web import AdminAccessService
+from web import AdminWebServer as _AdminWebServer
 from web.access import AdminIdentity
 from web.session_store import SQLiteWebSessionStore
 
 MIGRATIONS = Path(__file__).resolve().parent.parent / 'migrations'
 
 
+def campaign_service(database):
+    return CampaignService(
+        database,
+        CampaignRepository(database),
+        CharacterRepository(database),
+        MembershipRepository(database),
+    )
+
+
+def session_service(database):
+    return SessionService(
+        CampaignRepository(database),
+        SessionRepository(database),
+        GameConfigRepository(database),
+        MembershipRepository(database),
+    )
+
+
+class AdminWebServer(_AdminWebServer):
+    def __init__(self, database, access, campaigns, sessions, outbox, *args, **kwargs):
+        workflows = GameWorkflowService(database, sessions, outbox)
+        super().__init__(workflows, access, campaigns, sessions, outbox, *args, **kwargs)
+
+
 async def setup(tmp_path):
     database = await SQLiteDatabase.connect(str(tmp_path / 'web.sqlite3'))
     await apply_migrations(database, MIGRATIONS)
-    campaigns = CampaignService(database)
-    sessions = SessionService(database)
+    campaigns = campaign_service(database)
+    sessions = session_service(database)
     await campaigns.assign_master(-100, 7, 'Campaign')
     access = AdminAccessService(SQLiteWebSessionStore(database))
     bot = SimpleNamespace(

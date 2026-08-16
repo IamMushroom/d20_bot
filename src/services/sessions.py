@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum, auto
 
-from database.connection import Database
 from database.repositories import (
     ActiveSessionExistsError,
     CampaignRepository,
@@ -45,11 +44,17 @@ class SessionStop:
 
 
 class SessionService:
-    def __init__(self, database: Database):
-        self._campaigns = CampaignRepository(database)
-        self._sessions = SessionRepository(database)
-        self._configs = GameConfigRepository(database)
-        self._memberships = MembershipRepository(database)
+    def __init__(
+        self,
+        campaigns: CampaignRepository,
+        sessions: SessionRepository,
+        configs: GameConfigRepository,
+        memberships: MembershipRepository,
+    ) -> None:
+        self._campaigns = campaigns
+        self._sessions = sessions
+        self._configs = configs
+        self._memberships = memberships
 
     async def get_planned(self, chat_id: int) -> Session | None:
         campaign = await self._campaigns.get_by_chat_id(chat_id)

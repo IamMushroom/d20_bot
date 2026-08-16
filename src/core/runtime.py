@@ -3,7 +3,15 @@ from pathlib import Path
 
 from auth import IdentityProvider, RateLimiter, SQLiteLocalIdentityProvider, SQLiteRateLimiter
 from database import Database, apply_migrations, create_database
-from services import CampaignService, OutboxService, SessionService
+from database.repositories import (
+    CampaignRepository,
+    CharacterRepository,
+    GameConfigRepository,
+    MembershipRepository,
+    OutboxRepository,
+    SessionRepository,
+)
+from services import CampaignService, GameWorkflowService, OutboxService, SessionService
 from web import AdminAccessService, AdminWebServer
 from web.session_store import SQLiteWebSessionStore
 
@@ -14,6 +22,7 @@ class CoreRuntime:
     campaigns: CampaignService
     sessions: SessionService
     outbox: OutboxService
+    workflows: GameWorkflowService
     access: AdminAccessService
     identities: IdentityProvider
     rate_limiter: RateLimiter
@@ -34,14 +43,32 @@ class CoreRuntime:
         database = await create_database(database_url)
         try:
             await apply_migrations(database, migrations_directory)
-            campaigns = CampaignService(database)
-            sessions = SessionService(database)
-            outbox = OutboxService(database)
+            campaign_repository = CampaignRepository(database)
+            character_repository = CharacterRepository(database)
+            config_repository = GameConfigRepository(database)
+            membership_repository = MembershipRepository(database)
+            outbox_repository = OutboxRepository(database)
+            session_repository = SessionRepository(database)
+
+            campaigns = CampaignService(
+                database,
+                campaign_repository,
+                character_repository,
+                membership_repository,
+            )
+            sessions = SessionService(
+                campaign_repository,
+                session_repository,
+                config_repository,
+                membership_repository,
+            )
+            outbox = OutboxService(outbox_repository)
+            workflows = GameWorkflowService(database, sessions, outbox)
             access = AdminAccessService(SQLiteWebSessionStore(database))
             identities = SQLiteLocalIdentityProvider(database)
             rate_limiter = SQLiteRateLimiter(database)
             web_server = AdminWebServer(
-                database,
+                workflows,
                 access,
                 campaigns,
                 sessions,
@@ -60,6 +87,7 @@ class CoreRuntime:
             campaigns=campaigns,
             sessions=sessions,
             outbox=outbox,
+            workflows=workflows,
             access=access,
             identities=identities,
             rate_limiter=rate_limiter,
