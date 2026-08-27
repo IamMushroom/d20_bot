@@ -37,7 +37,8 @@ migrations/
 ├── 010_web_auth.sql
 ├── 011_local_auth.sql
 ├── 012_auth_rate_limits.sql
-└── 013_canonical_campaign_master.sql
+├── 013_canonical_campaign_master.sql
+└── 014_telegram_campaign_bindings.sql
 ```
 
 Telegram-команды не должны выполнять SQL или собирать бизнес-сценарии
@@ -189,7 +190,9 @@ schema_migrations(version, applied_at)
 
 ### Campaign
 
-Кампания соответствует Telegram-чату.
+Кампания имеет собственный внутренний `id`. На переходном этапе `chat_id` ещё остаётся в таблице
+`campaigns` для совместимости текущего application/API, но migration `014` уже создаёт отдельное
+infrastructure mapping `telegram_campaign_bindings` и backfill для каждой существующей кампании.
 
 | Поле | Назначение |
 |---|---|
@@ -197,6 +200,10 @@ schema_migrations(version, applied_at)
 | `chat_id` | Уникальный Telegram chat ID |
 | `title` | Название кампании или чата |
 | `created_at` | Время создания в UTC |
+
+`telegram_campaign_bindings` содержит уникальные `campaign_id` и Telegram `chat_id`. FK на
+`campaigns.id` использует `ON DELETE CASCADE`. До следующих этапов миграции обе representation
+существуют параллельно; runtime-поведение пока продолжает использовать старый столбец.
 
 Канонический источник мастера — единственная запись `campaign_memberships` с ролью `master`.
 Отдельного поля мастера в `campaigns` нет: уникальный partial index запрещает создать двух

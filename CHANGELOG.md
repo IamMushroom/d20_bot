@@ -4,9 +4,15 @@
 
 ## [Unreleased]
 
-- `ARCH-013`: добавлен ADR по identity кампании: рекомендована явная
+- `MIG-001`: добавлена таблица `telegram_campaign_bindings` с уникальными `campaign_id`/`chat_id`,
+  FK `ON DELETE CASCADE` и backfill всех существующих кампаний; `campaigns.chat_id` и runtime
+  behaviour временно сохранены для следующих совместимых этапов миграции.
+
+- `ARCH-013`: принят ADR по identity кампании: рекомендована явная
   `telegram_campaign_bindings`, определены cardinality, campaign-oriented internal API,
-  Bot-side resolution, влияние на web/outbox и backward-compatible порядок будущей миграции;
+  explicit setup, late-binding outbox semantics, отложенный detach/reattach lifecycle,
+  независимость названия кампании и adapter-only compatibility; финализированы Web/session/config
+  migration, campaign deletion, transitional outbox parser, no-cache baseline и критерии cleanup;
   production schema и код не изменялись.
 
 - `ARCH-012`: outbox-событие `game_scheduled` теперь содержит структурированные данные игры

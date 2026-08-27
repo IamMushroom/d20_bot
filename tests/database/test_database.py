@@ -119,7 +119,119 @@ def test_migrations_are_idempotent(tmp_path):
         {'version': 11},
         {'version': 12},
         {'version': 13},
+        {'version': 14},
     ]
+
+
+def test_telegram_binding_migration_backfills_existing_campaigns(tmp_path):
+    async def scenario():
+        migration_dir = tmp_path / 'binding-migrations'
+        migration_dir.mkdir()
+        for version in range(1, 14):
+            source = next(MIGRATIONS.glob(f'{version:03}_*.sql'))
+            (migration_dir / source.name).write_text(source.read_text(encoding='utf-8'))
+
+        database = await SQLiteDatabase.connect(str(tmp_path / 'binding-upgrade.sqlite3'))
+        await apply_migrations(database, migration_dir)
+        await database.execute(
+            """INSERT INTO campaigns (chat_id, title, created_at)
+            VALUES (-100, 'First', '2026-07-01T12:00:00+00:00'),
+                   (-200, 'Second', '2026-07-02T12:00:00+00:00')"""
+        )
+        before = await database.fetch_all(
+            'SELECT id, chat_id, title, created_at FROM campaigns ORDER BY id'
+        )
+
+        source = next(MIGRATIONS.glob('014_*.sql'))
+        (migration_dir / source.name).write_text(source.read_text(encoding='utf-8'))
+        await apply_migrations(database, migration_dir)
+        await apply_migrations(database, migration_dir)
+
+        after = await database.fetch_all(
+            'SELECT id, chat_id, title, created_at FROM campaigns ORDER BY id'
+        )
+        bindings = await database.fetch_all(
+            'SELECT campaign_id, chat_id, created_at FROM telegram_campaign_bindings ORDER BY campaign_id'
+        )
+        counts = await database.fetch_one(
+            """SELECT
+                (SELECT COUNT(*) FROM campaigns) AS campaigns,
+                (SELECT COUNT(*) FROM telegram_campaign_bindings) AS bindings,
+                (SELECT COUNT(*) FROM telegram_campaign_bindings AS b
+                    LEFT JOIN campaigns AS c ON c.id = b.campaign_id
+                    WHERE c.id IS NULL) AS orphans"""
+        )
+        versions = await database.fetch_all(
+            'SELECT version FROM schema_migrations WHERE version = 14'
+        )
+        await database.close()
+        return before, after, bindings, counts, versions
+
+    before, after, bindings, counts, versions = asyncio.run(scenario())
+    assert after == before
+    assert bindings == [
+        {
+            'campaign_id': before[0]['id'],
+            'chat_id': -100,
+            'created_at': '2026-07-01T12:00:00+00:00',
+        },
+        {
+            'campaign_id': before[1]['id'],
+            'chat_id': -200,
+            'created_at': '2026-07-02T12:00:00+00:00',
+        },
+    ]
+    assert counts == {'campaigns': 2, 'bindings': 2, 'orphans': 0}
+    assert versions == [{'version': 14}]
+
+
+def test_telegram_binding_constraints_and_campaign_cascade(tmp_path):
+    async def scenario():
+        database = await open_database(tmp_path)
+        campaigns = CampaignRepository(database)
+        first = await campaigns.get_or_create(-100, 'First')
+        second = await campaigns.get_or_create(-200, 'Second')
+        await database.execute(
+            """INSERT INTO telegram_campaign_bindings (campaign_id, chat_id, created_at)
+            VALUES (?, -100, '2026-07-01T12:00:00+00:00'),
+                   (?, -200, '2026-07-02T12:00:00+00:00')""",
+            (first.id, second.id),
+        )
+
+        with pytest.raises(sqlite3.IntegrityError):
+            await database.execute(
+                """INSERT INTO telegram_campaign_bindings (campaign_id, chat_id, created_at)
+                VALUES (?, -300, '2026-07-03T12:00:00+00:00')""",
+                (first.id,),
+            )
+
+        third = await database.fetch_one(
+            """INSERT INTO campaigns (chat_id, title, created_at)
+            VALUES (-300, 'Third', '2026-07-03T12:00:00+00:00') RETURNING id"""
+        )
+        assert third is not None
+        with pytest.raises(sqlite3.IntegrityError):
+            await database.execute(
+                """INSERT INTO telegram_campaign_bindings (campaign_id, chat_id, created_at)
+                VALUES (?, -100, '2026-07-03T12:00:00+00:00')""",
+                (int(third['id']),),
+            )
+        await database.execute('DELETE FROM campaigns WHERE id = ?', (int(third['id']),))
+
+        await database.execute('DELETE FROM campaigns WHERE id = ?', (first.id,))
+        deleted = await database.fetch_one(
+            'SELECT campaign_id FROM telegram_campaign_bindings WHERE campaign_id = ?',
+            (first.id,),
+        )
+        remaining = await database.fetch_all(
+            'SELECT campaign_id, chat_id FROM telegram_campaign_bindings ORDER BY campaign_id'
+        )
+        await database.close()
+        return deleted, remaining, second.id
+
+    deleted, remaining, second_id = asyncio.run(scenario())
+    assert deleted is None
+    assert remaining == [{'campaign_id': second_id, 'chat_id': -200}]
 
 
 def test_master_migration_preserves_membership_and_removes_legacy_column(tmp_path):
